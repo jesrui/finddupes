@@ -151,6 +151,48 @@ char *getpartialsignature(const char *filename)
     return getsignatureuntil(filename, PARTIAL_MD5_SIZE);
 }
 
+void grokfile(const char *fpath, khash_t(str) *files)
+{
+    printd("-- %s %s\n", __func__, fpath);
+
+    struct stat linfo;
+
+    if (lstat(fpath, &linfo) == -1) {
+        errormsg("lstat failed: %s: %s\n", fpath, strerror(errno));
+        return;
+    }
+
+    if (S_ISREG(linfo.st_mode)
+            || (S_ISLNK(linfo.st_mode) && flags & F_FOLLOWLINKS)) {
+        const char *sig = getpartialsignature(fpath);
+        if (!sig)
+            return;
+//            printd("-- %s %s %u %s\n", __func__, sig, (unsigned)strlen(sig), fpath);
+
+        int ret;
+        khiter_t k = kh_put(str, files, sig, &ret);
+        printd("-- %s kh_put sig %s ret %d\n", __func__, sig, ret);
+
+        klist_t(str) *dupes;
+
+        switch (ret) {
+        case -1:
+            errormsg("%s error in kh_put()\n", __func__);
+            return;
+        case 0:
+            printd("-- %s key already present\n", __func__);
+            dupes = kh_value(files, k);
+            break;
+        default:
+            dupes = kl_init(str);
+            kh_value(files, k) = dupes;
+            break;
+        }
+
+        *kl_pushp(str, dupes) = fpath;
+    }
+}
+
 void grokdir(const char *dir, khash_t(str) *files)
 {
     printd("-- %s %s\n", __func__, dir);
@@ -186,42 +228,10 @@ void grokdir(const char *dir, khash_t(str) *files)
             continue;
         }
 
-        if (lstat(fpath, &linfo) == -1) {
-            errormsg("lstat failed: %s: %s\n", fpath, strerror(errno));
-            continue;
-        }
-
         if (S_ISDIR(info.st_mode)) {
             grokdir(fpath, files);
-        } else if (S_ISREG(linfo.st_mode)
-                   || (S_ISLNK(linfo.st_mode) && flags & F_FOLLOWLINKS)) {
-            const char *sig = getpartialsignature(fpath);
-            if (!sig)
-                continue;
-//            printd("-- %s %s %u %s\n", __func__, sig, (unsigned)strlen(sig), fpath);
-
-            int ret;
-            khiter_t k = kh_put(str, files, sig, &ret);
-            printd("-- %s kh_put sig %s ret %d\n", __func__, sig, ret);
-
-            klist_t(str) *dupes;
-
-            switch (ret) {
-            case -1:
-                errormsg("%s error in kh_put()\n", __func__);
-                continue;
-            case 0:
-                printd("-- %s key already present\n", __func__);
-                dupes = kh_value(files, k);
-                break;
-            default:
-                dupes = kl_init(str);
-                kh_value(files, k) = dupes;
-                break;
-            }
-
-            *kl_pushp(str, dupes) = fpath;
-        }
+        } else
+            grokfile(fpath, files);
     }
     closedir(cd);
 }
@@ -269,10 +279,18 @@ int main(int argc, char **argv)
     khash_t(str) *files = kh_init(str);
 
     int i;
-    for (i = 1; i < argc; ++i)
-    {
-        char *dir = normalizepath(argv[i]);
-        grokdir(dir, files);
+    struct stat info;
+    for (i = 1; i < argc; ++i) {
+        if (stat(argv[i], &info) == -1) {
+            errormsg("stat failed: %s: %s\n", argv[i], strerror(errno));
+            continue;
+        }
+        if (S_ISDIR(info.st_mode)) {
+            char *dir = normalizepath(argv[i]);
+            grokdir(dir, files);
+            free(dir);
+        } else
+            grokfile(strdup(argv[i]), files);
     }
 
     khint_t k;
