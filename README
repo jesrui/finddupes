@@ -1,0 +1,4 @@
+
+gcc -Wall -O -g -I. finddupes.c md5/md5.o -o finddupes
+
+clang -Wall -O -g -I. finddupes.c md5/md5.o -o finddupes
