@@ -266,14 +266,16 @@ int main(int argc, char **argv)
     flags |= F_RECURSE;
     flags |= F_FOLLOWLINKS;
 
-    khash_t(str) *files = NULL;
+    khash_t(str) *files = kh_init(str);
+
+    int i;
+    for (i = 1; i < argc; ++i)
+    {
+        char *dir = normalizepath(argv[i]);
+        grokdir(dir, files);
+    }
+
     khint_t k;
-    files = kh_init(str);
-
-    char *dir = normalizepath(argv[1]);
-
-    grokdir(dir, files);
-
     for (k = kh_begin(files); k != kh_end(files); ++k)
         if (kh_exist(files, k)) {
             printd("%s files[%s]\n", __func__, kh_key(files, k));
