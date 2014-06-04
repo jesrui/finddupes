@@ -21,7 +21,7 @@
 #define PARTIAL_MD5_SIZE 4096
 #define __str_free(x)
 
-KLIST_INIT(str, const char *, __str_free);
+KLIST_INIT(str, const char *, __str_free)
 KHASH_MAP_INIT_STR(str, klist_t(str)*)
 
 int flags;
@@ -151,6 +151,9 @@ char *getpartialsignature(const char *filename)
     return getsignatureuntil(filename, PARTIAL_MD5_SIZE);
 }
 
+/**
+ * @param fpath a heap allocated string; the function takes ownership of fpath
+ */
 void grokfile(const char *fpath, khash_t(str) *files)
 {
     printd("-- %s %s\n", __func__, fpath);
@@ -178,9 +181,11 @@ void grokfile(const char *fpath, khash_t(str) *files)
         switch (ret) {
         case -1:
             errormsg("%s error in kh_put()\n", __func__);
+            free((char*)sig);
             return;
         case 0:
             printd("-- %s key already present\n", __func__);
+            free((char*)sig);
             dupes = kh_value(files, k);
             break;
         default:
@@ -235,7 +240,6 @@ void grokdir(const char *dir, khash_t(str) *files)
     }
     closedir(cd);
 }
-
 
 #define __int_free(x)
 KLIST_INIT(32, int, __int_free)
@@ -307,7 +311,11 @@ int main(int argc, char **argv)
         // explicitly freeing memory takes 10-20% CPU time.
         if (kh_exist(files, k)) {
             klist_t(str) *dupes = kh_value(files, k);
+            kliter_t(str) *p;
+            for (p = kl_begin(dupes); p != kl_end(dupes); p = kl_next(p))
+                free((char*)kl_val(p));
             kl_destroy(str, dupes);
+            free((char*)kh_key(files, k));
         }
 
     kh_destroy(str, files);
