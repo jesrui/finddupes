@@ -143,9 +143,9 @@ char *getsignatureuntil(const char *filename, off_t max_read)
     return strdup(signature);
 }
 
-char *getsignature(const char *filename)
+char *getfullsignature(const char *filename)
 {
-    return getsignatureuntil(filename, 0); // TODO
+    return getsignatureuntil(filename, 0);
 }
 
 char *getpartialsignature(const char *filename)
@@ -176,7 +176,7 @@ void grokfile(const char *fpath, khash_t(str) *files)
 
         int ret;
         khiter_t k = kh_put(str, files, sig, &ret);
-        printd("-- %s kh_put sig %s ret %d\n", __func__, sig, ret);
+//        printd("-- %s kh_put sig %s ret %d\n", __func__, sig, ret);
 
         klist_t(str) *dupes;
 
@@ -186,7 +186,7 @@ void grokfile(const char *fpath, khash_t(str) *files)
             free((char*)sig);
             return;
         case 0:
-            printd("-- %s key already present\n", __func__);
+//            printd("-- %s key already present\n", __func__);
             free((char*)sig);
             dupes = kh_value(files, k);
             break;
@@ -243,6 +243,104 @@ void grokdir(const char *dir, khash_t(str) *files)
     closedir(cd);
 }
 
+/**
+ * move files for which the full signature differs from the partial signature
+ * from files to checked_files
+ */
+void checkdupes(khint_t k, khash_t(str) *files, khash_t(str) *checked_files)
+{
+//    printd("%s files[%s]\n", __func__, kh_key(files, k));
+    klist_t(str) *dupes = kh_value(files, k);
+    kliter_t(str) *p;
+
+    if (kl_next(kl_begin(dupes)) == kl_end(dupes)) { // size == 1?
+//        printd("%s no dupes for %s\n", __func__, kh_key(files, k));
+        return;
+    }
+
+    const char *partsig = kh_key(files, k); // partial signature
+    klist_t(str) *filtered_dupes = kl_init(str);
+
+    for (p = kl_begin(dupes); p != kl_end(dupes); p = kl_next(p)) {
+        const char *fpath = kl_val(p);
+
+        const char *fullsig = getfullsignature(fpath);
+        if (!fullsig)
+            continue;
+
+//        printd("-- %s %s fullsig %s\n", __func__, fpath, fullsig);
+
+        if (strcmp(fullsig, partsig) == 0) {
+//            printd("-- %s fullsig == partsig, continuing\n", __func__);
+            free((char*)fullsig);
+            *kl_pushp(str, filtered_dupes) = fpath;
+            continue;
+        }
+
+        int ret;
+        khiter_t checked_k = kh_put(str, checked_files, fullsig, &ret);
+//        printd("-- %s kh_put fullsig %s ret %d\n", __func__, fullsig, ret);
+
+        klist_t(str) *checked_dupes;
+
+        switch (ret) {
+        case -1:
+            errormsg("%s error in kh_put()\n", __func__);
+            free((char*)fullsig);
+            continue;
+        case 0:
+//            printd("-- %s key already present\n", __func__);
+            free((char*)fullsig);
+            checked_dupes = kh_value(checked_files, checked_k);
+            break;
+        default:
+            checked_dupes = kl_init(str);
+            kh_value(checked_files, checked_k) = checked_dupes;
+            break;
+        }
+
+        *kl_pushp(str, checked_dupes) = fpath;
+    }
+
+    // TODO remove files entry at k if filtered_dupes is empty
+    kh_value(files, k) = filtered_dupes;
+    kl_destroy(str, dupes);
+}
+
+/**
+ * merge checked_files into files
+ */
+void mergechecked(khash_t(str) *files, khash_t(str) *checked_files)
+{
+    khint_t checked_k;
+    for (checked_k = kh_begin(checked_files);
+            checked_k != kh_end(checked_files); ++checked_k) {
+        if (!kh_exist(checked_files, checked_k))
+            continue;
+
+        const char *sig = kh_key(checked_files, checked_k);
+        int ret;
+        khiter_t k = kh_put(str, files, sig, &ret);
+//        printd("-- %s kh_put sig %s ret %d\n", __func__, fullsig, ret);
+
+        switch (ret) {
+        case -1:
+            errormsg("%s error in kh_put()\n", __func__);
+            continue;
+        case 0:
+            printd("-- %s uh oh key already present\n", __func__);
+            // there is a file with a (partial) signature equal to the current
+            // full checked signature
+            // TODO fix signature collision
+            continue;
+        default:
+            kh_value(files, k) = kh_value(checked_files, checked_k);
+            break;
+        }
+    }
+    kh_clear(str, checked_files);
+}
+
 #define __int_free(x)
 KLIST_INIT(32, int, __int_free)
 void test_klist(void)
@@ -255,7 +353,7 @@ void test_klist(void)
         *kl_pushp(32, kl) = 10;
 //	kl_shift(32, kl, 0);
         for (p = kl_begin(kl); p != kl_end(kl); p = kl_next(p))
-            printf("%d\n", kl_val(p));
+            printd("%d\n", kl_val(p));
         kl_destroy(32, kl);
     }
 
@@ -265,8 +363,39 @@ void test_klist(void)
     *kl_pushp(str, dupes) = strdup("asdf");
     *kl_pushp(str, dupes) = strdup("qwertz");
     for (p = kl_begin(dupes); p != kl_end(dupes); p = kl_next(p))
-        printf("%s\n", kl_val(p));
+        printd("%s\n", kl_val(p));
     kl_destroy(str, dupes);
+}
+
+void dumpfiles(khash_t(str) *files)
+{
+    khint_t k;
+    for (k = kh_begin(files); k != kh_end(files); ++k)
+        if (kh_exist(files, k)) {
+            printd("%s files[%s]\n", __func__, kh_key(files, k));
+            klist_t(str) *dupes = kh_value(files, k);
+            kliter_t(str) *p;
+            for (p = kl_begin(dupes); p != kl_end(dupes); p = kl_next(p))
+               printd("\t%s\n", kl_val(p));
+        }
+}
+
+/**
+ * free files's hash keys (C strings) and values (lists of C strings)
+ */
+void freefiles(khash_t(str) *files)
+{
+    khint_t k;
+    for (k = kh_begin(files); k != kh_end(files); ++k)
+        // explicitly freeing memory takes 10-20% CPU time.
+        if (kh_exist(files, k)) {
+            klist_t(str) *dupes = kh_value(files, k);
+            kliter_t(str) *p;
+            for (p = kl_begin(dupes); p != kl_end(dupes); p = kl_next(p))
+                free((char*)kl_val(p));
+            kl_destroy(str, dupes);
+            free((char*)kh_key(files, k));
+        }
 }
 
 int main(int argc, char **argv)
@@ -299,27 +428,32 @@ int main(int argc, char **argv)
             grokfile(strdup(argv[i]), files);
     }
 
+    printd("-- before checkdupes\n");
+    dumpfiles(files);
+
     khint_t k;
+    khash_t(str) *checked_files = kh_init(str);
     for (k = kh_begin(files); k != kh_end(files); ++k)
         if (kh_exist(files, k)) {
-            printd("%s files[%s]\n", __func__, kh_key(files, k));
-            klist_t(str) *dupes = kh_value(files, k);
-            kliter_t(str) *p;
-            for (p = kl_begin(dupes); p != kl_end(dupes); p = kl_next(p))
-                printf("\t%s\n", kl_val(p));
+            checkdupes(k, files, checked_files);
         }
 
-    for (k = kh_begin(files); k != kh_end(files); ++k)
-        // explicitly freeing memory takes 10-20% CPU time.
-        if (kh_exist(files, k)) {
-            klist_t(str) *dupes = kh_value(files, k);
-            kliter_t(str) *p;
-            for (p = kl_begin(dupes); p != kl_end(dupes); p = kl_next(p))
-                free((char*)kl_val(p));
-            kl_destroy(str, dupes);
-            free((char*)kh_key(files, k));
-        }
 
+    printd("-- after checkdupes\n");
+    dumpfiles(files);
+
+    printd("-- checked_files\n");
+    dumpfiles(checked_files);
+
+    mergechecked(files, checked_files);
+
+    printd("-- after mergechecked\n");
+    dumpfiles(files);
+
+    freefiles(checked_files);
+    kh_destroy(str, checked_files);
+
+    freefiles(files);
     kh_destroy(str, files);
 
     return 0;
