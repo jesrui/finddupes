@@ -232,11 +232,13 @@ void grokdir(const char *dir, khash_t(str) *files)
 
         if (stat(fpath, &info) == -1) {
             errormsg("stat failed: %s: %s\n", fpath, strerror(errno));
+            free((char*)fpath);
             continue;
         }
 
         if (S_ISDIR(info.st_mode)) {
             grokdir(fpath, files);
+            free((char*)fpath);
         } else
             grokfile(fpath, files);
     }
