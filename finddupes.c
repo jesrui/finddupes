@@ -99,8 +99,6 @@ char *getsignatureuntil(const char *filename, off_t max_read)
     md5_state_t state;
     md5_byte_t digest[16];
     static md5_byte_t chunk[CHUNK_SIZE];
-    char signature[16*2 + 1] = "";
-    char *sigp;
     FILE *file;
 
     md5_init(&state);
@@ -129,12 +127,16 @@ char *getsignatureuntil(const char *filename, off_t max_read)
 
     md5_finish(&state, digest);
 
-    sigp = signature;
-
+    char signature[16*2 + 1];
+    char *sigp = signature;
+    static const char hexdigits[] = "0123456789abcdef";
     for (x = 0; x < 16; x++) {
-        sprintf(sigp, "%02x", digest[x]);
-        sigp = strchr(sigp, '\0');
+        md5_byte_t digit0 = digest[x] % 16;
+        md5_byte_t digit1 = (digest[x] - digit0) / 16;
+        *sigp++ = hexdigits[digit1];
+        *sigp++ = hexdigits[digit0];
     }
+    *sigp = '\0';
 
     fclose(file);
 
