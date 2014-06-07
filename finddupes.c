@@ -255,7 +255,8 @@ void checkdupes(khint_t k, khash_t(str) *files, khash_t(str) *checked_files)
     klist_t(str) *dupes = kh_value(files, k);
     kliter_t(str) *p;
 
-    if (kl_next(kl_begin(dupes)) == kl_end(dupes)) { // size == 1?
+    if (kl_begin(dupes) == kl_end(dupes) // empty?
+            || kl_next(kl_begin(dupes)) == kl_end(dupes)) { // size == 1?
 //        printd("%s no dupes for %s\n", __func__, kh_key(files, k));
         return;
     }
@@ -304,8 +305,14 @@ void checkdupes(khint_t k, khash_t(str) *files, khash_t(str) *checked_files)
         *kl_pushp(str, checked_dupes) = fpath;
     }
 
-    // TODO remove files entry at k if filtered_dupes is empty
-    kh_value(files, k) = filtered_dupes;
+    if (kl_begin(filtered_dupes) == kl_end(filtered_dupes)) {
+        // filtered_dupes is empty; remove files entry at k
+        kh_del(str, files, k);
+        free((char*)partsig);
+        kl_destroy(str, filtered_dupes);
+    }
+    else // replace files entry at k
+        kh_value(files, k) = filtered_dupes;
     kl_destroy(str, dupes);
 }
 
@@ -330,7 +337,7 @@ void mergechecked(khash_t(str) *files, khash_t(str) *checked_files)
             errormsg("%s error in kh_put()\n", __func__);
             continue;
         case 0:
-            printd("-- %s uh oh key already present\n", __func__);
+            errormsg("-- %s uh oh key already present %s\n", __func__, sig);
             // there is a file with a (partial) signature equal to the current
             // full checked signature
             // TODO fix signature collision
@@ -430,8 +437,8 @@ int main(int argc, char **argv)
             grokfile(strdup(argv[i]), files);
     }
 
-    printd("-- before checkdupes\n");
-    dumpfiles(files);
+//    printd("-- before checkdupes\n");
+//    dumpfiles(files);
 
     khint_t k;
     khash_t(str) *checked_files = kh_init(str);
@@ -440,12 +447,11 @@ int main(int argc, char **argv)
             checkdupes(k, files, checked_files);
         }
 
+//    printd("-- after checkdupes\n");
+//    dumpfiles(files);
 
-    printd("-- after checkdupes\n");
-    dumpfiles(files);
-
-    printd("-- checked_files\n");
-    dumpfiles(checked_files);
+//    printd("-- checked_files\n");
+//    dumpfiles(checked_files);
 
     mergechecked(files, checked_files);
 
