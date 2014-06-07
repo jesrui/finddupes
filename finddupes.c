@@ -39,18 +39,6 @@ void errormsg(const char *message, ...)
     va_end(ap);
 }
 
-// TODO replace malloc w/ checkmalloc in the whole program
-// e.g. also for strcat()
-void *checkmalloc(size_t size)
-{
-    void *r = malloc(size);
-    if (!r) {
-        errormsg("out of memory!\n");
-        exit(1);
-    }
-    return r;
-}
-
 void usage(void)
 {
     fprintf(stderr, "usage: fdupes2 DIR...\n");
@@ -68,7 +56,7 @@ char *normalizepath(const char *path)
 
 char *joinpath(const char *dir, const char *filename)
 {
-    char *fpath = (char*)checkmalloc(strlen(dir)
+    char *fpath = (char*)malloc(strlen(dir)
                                      + strlen(filename)+2);
     strcpy(fpath, dir);
     int last = strlen(dir) - 1;
