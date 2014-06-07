@@ -3,6 +3,7 @@
 #include <assert.h>
 #include <dirent.h>
 #include <errno.h>
+#include <getopt.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -17,6 +18,7 @@
 
 #define printd printf
 
+#define VERSION "0.1"
 #define CHUNK_SIZE 8192
 #define PARTIAL_MD5_SIZE 4096
 #define __str_free(x)
@@ -27,9 +29,19 @@ KHASH_MAP_INIT_STR(str, klist_t(str)*)
 int flags;
 
 enum {
-    F_RECURSE = 1,
-    F_FOLLOWLINKS = 1 << 2,
+    F_OMITFIRST         = 1 << 1,
+    F_RECURSE           = 1 << 2,
+    F_HIDEPROGRESS      = 1 << 3,
+    F_DSAMELINE         = 1 << 4,
+    F_SHOWSIZE          = 1 << 5,
+    F_FOLLOWLINKS       = 1 << 6,
+    F_CONSIDERHARDLINKS = 1 << 7,
+    F_EXCLUDEEMPTY      = 1 << 8,
+    F_DELETEFILES       = 1 << 9,
+    F_NOPROMPT          = 1 << 10,
+    F_SUMMARIZEMATCHES  = 1 << 11,
 };
+
 
 void errormsg(const char *message, ...)
 {
@@ -41,7 +53,33 @@ void errormsg(const char *message, ...)
 
 void usage(void)
 {
-    fprintf(stderr, "usage: fdupes2 DIR...\n");
+    fputs("usage: finddupes PATH...\n\n"
+          " -r --recurse     \tfor every directory given follow subdirectories\n"
+          "                  \tencountered within\n"
+          " -R --recurse:    \tfor each directory given after this option follow\n"
+          "                  \tsubdirectories encountered within\n"
+          " -s --symlinks    \tfollow symlinks\n"
+          " -H --hardlinks   \tnormally, when two or more files point to the same\n"
+          "                  \tdisk area they are treated as non-duplicates; this\n"
+          "                  \toption will change this behavior\n"
+          " -n --noempty     \texclude zero-length files from consideration\n"
+          " -f --omitfirst   \tomit the first file in each set of matches\n"
+          " -1 --sameline    \tlist each set of matches on a single line\n"
+          " -S --size        \tshow size of duplicate files\n"
+          " -m --summarize   \tsummarize dupe information\n"
+          " -q --quiet       \thide progress indicator\n"
+          " -d --delete      \tprompt user for files to preserve and delete all\n"
+          "                  \tothers; important: under particular circumstances,\n"
+          "                  \tdata may be lost when using this option together\n"
+          "                  \twith -s or --symlinks, or when specifying a\n"
+          "                  \tparticular directory more than once; refer to the\n"
+          "                  \tfdupes documentation for additional information\n"
+          " -l --relink      \t(description)\n"
+          " -N --noprompt    \ttogether with --delete, preserve the first file in\n"
+          "                  \teach set of duplicates and delete the rest without\n"
+          "                  \tprompting the user\n"
+          " -v --version     \tdisplay finddupes version\n"
+          " -h --help        \tdisplay this help message\n", stderr);
 }
 
 char *normalizepath(const char *path)
@@ -57,7 +95,7 @@ char *normalizepath(const char *path)
 char *joinpath(const char *dir, const char *filename)
 {
     char *fpath = (char*)malloc(strlen(dir)
-                                     + strlen(filename)+2);
+                                + strlen(filename)+2);
     strcpy(fpath, dir);
     int last = strlen(dir) - 1;
     if (last >= 0 && dir[last] != '/')
@@ -225,7 +263,8 @@ void grokdir(const char *dir, khash_t(str) *files)
         }
 
         if (S_ISDIR(info.st_mode)) {
-            grokdir(fpath, files);
+            if (flags & F_RECURSE)
+                grokdir(fpath, files);
             free((char*)fpath);
         } else
             grokfile(fpath, files);
@@ -298,8 +337,7 @@ void checkdupes(khint_t k, khash_t(str) *files, khash_t(str) *checked_files)
         kh_del(str, files, k);
         free((char*)partsig);
         kl_destroy(str, filtered_dupes);
-    }
-    else // replace files entry at k
+    } else // replace files entry at k
         kh_value(files, k) = filtered_dupes;
     kl_destroy(str, dupes);
 }
@@ -373,7 +411,7 @@ void dumpfiles(khash_t(str) *files)
             klist_t(str) *dupes = kh_value(files, k);
             kliter_t(str) *p;
             for (p = kl_begin(dupes); p != kl_end(dupes); p = kl_next(p))
-               printd("\t%s\n", kl_val(p));
+                printd("\t%s\n", kl_val(p));
         }
 }
 
@@ -395,24 +433,99 @@ void freefiles(khash_t(str) *files)
         }
 }
 
+int parseopts(int argc, char **argv)
+{
+    static struct option long_options[] = {
+        { "omitfirst", 0, NULL, 'f' },
+        { "recursive", 0, NULL, 'r' },
+        { "quiet", 0, NULL, 'q' },
+        { "sameline", 0, NULL, '1' },
+        { "size", 0, NULL, 'S' },
+        { "symlinks", 0, NULL, 's' },
+        { "hardlinks", 0, NULL, 'H' },
+        { "relink", 0, NULL, 'l' },
+        { "noempty", 0, NULL, 'n' },
+        { "delete", 0, NULL, 'd' },
+        { "version", 0, NULL, 'v' },
+        { "help", 0, NULL, 'h' },
+        { "noprompt", 0, NULL, 'N' },
+        { "summarize", 0, NULL, 'm'},
+        { "summary", 0, NULL, 'm' },
+        { NULL, 0, NULL, 0 }
+    };
+
+    int opt;
+
+    while ((opt = getopt_long(argc, argv, "frRq1SsHlndvhNm", long_options, NULL))
+            != EOF) {
+        switch (opt) {
+        case 'f':
+            flags |= F_OMITFIRST;
+            break;
+        case 'r':
+            flags |= F_RECURSE;
+            break;
+        case 'q':
+            flags |= F_HIDEPROGRESS;
+            break;
+        case '1':
+            flags |= F_DSAMELINE;
+            break;
+        case 'S':
+            flags |= F_SHOWSIZE;
+            break;
+        case 's':
+            flags |= F_FOLLOWLINKS;
+            break;
+        case 'H':
+            flags |= F_CONSIDERHARDLINKS;
+            break;
+        case 'n':
+            flags |= F_EXCLUDEEMPTY;
+            break;
+        case 'd':
+            flags |= F_DELETEFILES;
+            break;
+        case 'v':
+            printf("finddupes %s\n", VERSION);
+            exit(0);
+        case 'h':
+            usage();
+            exit(1);
+        case 'N':
+            flags |= F_NOPROMPT;
+            break;
+        case 'm':
+            flags |= F_SUMMARIZEMATCHES;
+            break;
+
+        default:
+            fprintf(stderr, "Try `finddupes --help' for more information.\n");
+            exit(1);
+        }
+    }
+
+    if (optind >= argc) {
+        errormsg("no paths specified\n");
+        exit(1);
+    }
+
+    return optind;
+}
+
 int main(int argc, char **argv)
 {
 //    test_klist();
 //    return 0;
 
-    if (argc < 2) {
-        usage();
-        return 1;
-    }
-
-    flags |= F_RECURSE;
-    flags |= F_FOLLOWLINKS;
+    int firstarg = parseopts(argc, argv);
+    printd("-- %s firstarg %d flags 0x%x\n", __func__, firstarg, flags);
 
     khash_t(str) *files = kh_init(str);
 
     int i;
     struct stat info;
-    for (i = 1; i < argc; ++i) {
+    for (i = firstarg; i < argc; ++i) {
         if (stat(argv[i], &info) == -1) {
             errormsg("stat failed: %s: %s\n", argv[i], strerror(errno));
             continue;
