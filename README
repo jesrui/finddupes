@@ -1,6 +1,8 @@
 
 gcc -Wall -O -g -I. finddupes.c md5/md5.o -o finddupes
 
+gcc -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=realloc -Wall -O -g -I. finddupes.c md5/md5.o wrapmalloc.c -o finddupes
+
 clang -Wall -O -g -I. finddupes.c md5/md5.o -o finddupes
 
 valgrind --leak-check=full ./finddupes testdir/recursed_b
