@@ -204,14 +204,12 @@ void grokfile(const char *fpath, khash_t(str) *files)
 
     if (!(S_ISREG(linfo.st_mode)
         || (S_ISLNK(linfo.st_mode) && flags & F_FOLLOWLINKS))) {
-        free((char*)fpath);
-        return;
+        goto out2;
     }
 
     const char *sig = getpartialsignature(fpath);
     if (!sig) {
-        free((char*)fpath);
-        return;
+        goto out2;
     }
 //        printd("-- %s %s %u %s\n", __func__, sig, (unsigned)strlen(sig), fpath);
 
@@ -224,9 +222,7 @@ void grokfile(const char *fpath, khash_t(str) *files)
     switch (ret) {
     case -1:
         errormsg("%s error in kh_put()\n", __func__);
-        free((char*)fpath);
-        free((char*)sig);
-        return;
+        goto out1;
     case 0:
 //            printd("-- %s key already present\n", __func__);
         free((char*)sig);
@@ -239,6 +235,12 @@ void grokfile(const char *fpath, khash_t(str) *files)
     }
 
     *kl_pushp(str, dupes) = fpath;
+    return;
+
+out1:
+    free((char*)sig);
+out2:
+    free((char*)fpath);
 }
 
 void grokdir(const char *dir, khash_t(str) *files)

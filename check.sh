@@ -1,7 +1,7 @@
 #!/bin/bash
 
 FD=./finddupes
-#FD="valgrind --leak-check=full ./finddupes"
+FD="valgrind --leak-check=full --error-exitcode=1 ./finddupes"
 D=testdir
 
 test_symlink_file()
