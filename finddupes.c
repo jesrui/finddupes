@@ -40,6 +40,7 @@ enum {
     F_DELETEFILES       = 1 << 9,
     F_NOPROMPT          = 1 << 10,
     F_SUMMARIZEMATCHES  = 1 << 11,
+    F_UNIQUE            = 1 << 12,
 };
 
 
@@ -66,6 +67,7 @@ void usage(void)
           " -f --omitfirst   \tomit the first file in each set of matches\n"
           " -1 --sameline    \tlist each set of matches on a single line\n"
           " -S --size        \tshow size of duplicate files\n"
+          " -u --unique      \tlist only files without duplicates\n"
           " -m --summarize   \tsummarize dupe information\n"
           " -q --quiet       \thide progress indicator\n"
           " -d --delete      \tprompt user for files to preserve and delete all\n"
@@ -439,22 +441,29 @@ void freefiles(khash_t(str) *files)
         }
 }
 
-void printdupes(khash_t(str) *files)
+void printfiles(khash_t(str) *files)
 {
     khint_t k;
-    for (k = kh_begin(files); k != kh_end(files); ++k)
-        if (kh_exist(files, k)) {
-            klist_t(str) *dupes = kh_value(files, k);
-            if (kl_begin(dupes) == kl_end(dupes) // empty?
-                || kl_next(kl_begin(dupes)) == kl_end(dupes)) { // size == 1?
+    for (k = kh_begin(files); k != kh_end(files); ++k) {
+        if (!kh_exist(files, k))
+            continue;
+        klist_t(str) *dupes = kh_value(files, k);
+        if (kl_begin(dupes) == kl_end(dupes))
+            continue;
+        if (kl_next(kl_begin(dupes)) == kl_end(dupes)) { // size == 1?
+            if (flags & F_UNIQUE)
+                puts(kl_val(kl_begin(dupes)));
+            continue;
+        } else {
+            if (flags & F_UNIQUE)
                 continue;
-            }
             kliter_t(str) *p;
             for (p = kl_begin(dupes); p != kl_end(dupes); p = kl_next(p)) {
                 puts(kl_val(p));
             }
             putchar('\n');
         }
+    }
 }
 
 int parseopts(int argc, char **argv)
@@ -465,6 +474,7 @@ int parseopts(int argc, char **argv)
         { "quiet", 0, NULL, 'q' },
         { "sameline", 0, NULL, '1' },
         { "size", 0, NULL, 'S' },
+        { "unique", 0, NULL, 'u' },
         { "symlinks", 0, NULL, 's' },
         { "hardlinks", 0, NULL, 'H' },
         { "relink", 0, NULL, 'l' },
@@ -480,8 +490,8 @@ int parseopts(int argc, char **argv)
 
     int opt;
 
-    while ((opt = getopt_long(argc, argv, "frRq1SsHlndvhNm", long_options, NULL))
-            != EOF) {
+    while ((opt = getopt_long(argc, argv, "frRq1SusHlndvhNm", long_options,
+                NULL)) != EOF) {
         switch (opt) {
         case 'f':
             flags |= F_OMITFIRST;
@@ -497,6 +507,9 @@ int parseopts(int argc, char **argv)
             break;
         case 'S':
             flags |= F_SHOWSIZE;
+            break;
+        case 'u':
+            flags |= F_UNIQUE;
             break;
         case 's':
             flags |= F_FOLLOWLINKS;
@@ -586,7 +599,7 @@ int main(int argc, char **argv)
 //    printd("-- after mergechecked\n");
 //    dumpfiles(files);
 
-    printdupes(files);
+    printfiles(files);
 
     freefiles(checked_files);
     kh_destroy(str, checked_files);
