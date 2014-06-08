@@ -16,7 +16,8 @@
 #include "klib/klist.h"
 #include "md5/md5.h"
 
-#define printd printf
+//#define printd printf
+#define printd(...) /* nothing*/
 
 #define VERSION "0.1"
 #define CHUNK_SIZE 8192
@@ -67,7 +68,7 @@ void usage(void)
           " -f --omitfirst   \tomit the first file in each set of matches\n"
           " -1 --sameline    \tlist each set of matches on a single line\n"
           " -S --size        \tshow size of duplicate files\n"
-          " -u --unique      \tlist only files without duplicates\n"
+          " -u --unique      \tlist only files that don't have duplicates\n"
           " -m --summarize   \tsummarize dupe information\n"
           " -q --quiet       \thide progress indicator\n"
           " -d --delete      \tprompt user for files to preserve and delete all\n"
