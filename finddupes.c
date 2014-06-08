@@ -183,13 +183,20 @@ char *getpartialsignature(const char *filename)
  */
 void grokfile(const char *fpath, khash_t(str) *files)
 {
-    printd("-- %s %s\n", __func__, fpath);
+//    printd("-- %s %s\n", __func__, fpath);
 
     struct stat linfo;
 
     if (lstat(fpath, &linfo) == -1) {
         errormsg("lstat failed: %s: %s\n", fpath, strerror(errno));
         return;
+    }
+
+    static char indicator[] = "-\\|/";
+    static int progress = 0;
+    if (!(flags & F_HIDEPROGRESS)) {
+        fprintf(stderr, "\rscanning files %c ", indicator[progress]);
+        progress = (progress + 1) % 4;
     }
 
     if (S_ISREG(linfo.st_mode)
@@ -227,7 +234,7 @@ void grokfile(const char *fpath, khash_t(str) *files)
 
 void grokdir(const char *dir, khash_t(str) *files)
 {
-    printd("-- %s %s\n", __func__, dir);
+//    printd("-- %s %s\n", __func__, dir);
 
     DIR *cd;
     struct dirent *dirinfo;
@@ -536,6 +543,9 @@ int main(int argc, char **argv)
         } else
             grokfile(strdup(argv[i]), files);
     }
+
+    if (!(flags & F_HIDEPROGRESS))
+        fprintf(stderr, "\r%40s\r", " ");
 
 //    printd("-- before checkdupes\n");
 //    dumpfiles(files);
