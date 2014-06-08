@@ -190,11 +190,6 @@ void grokfile(const char *fpath, khash_t(str) *files)
 
     struct stat linfo;
 
-    if (lstat(fpath, &linfo) == -1) {
-        errormsg("lstat failed: %s: %s\n", fpath, strerror(errno));
-        return;
-    }
-
     static char indicator[] = "-\\|/";
     static int progress = 0;
     if (!(flags & F_HIDEPROGRESS)) {
@@ -202,37 +197,48 @@ void grokfile(const char *fpath, khash_t(str) *files)
         progress = (progress + 1) % 4;
     }
 
-    if (S_ISREG(linfo.st_mode)
-            || (S_ISLNK(linfo.st_mode) && flags & F_FOLLOWLINKS)) {
-        const char *sig = getpartialsignature(fpath);
-        if (!sig)
-            return;
+    if (lstat(fpath, &linfo) == -1) {
+        errormsg("lstat failed: %s: %s\n", fpath, strerror(errno));
+        return;
+    }
+
+    if (!(S_ISREG(linfo.st_mode)
+        || (S_ISLNK(linfo.st_mode) && flags & F_FOLLOWLINKS))) {
+        free((char*)fpath);
+        return;
+    }
+
+    const char *sig = getpartialsignature(fpath);
+    if (!sig) {
+        free((char*)fpath);
+        return;
+    }
 //        printd("-- %s %s %u %s\n", __func__, sig, (unsigned)strlen(sig), fpath);
 
-        int ret;
-        khiter_t k = kh_put(str, files, sig, &ret);
+    int ret;
+    khiter_t k = kh_put(str, files, sig, &ret);
 //        printd("-- %s kh_put sig %s ret %d\n", __func__, sig, ret);
 
-        klist_t(str) *dupes;
+    klist_t(str) *dupes;
 
-        switch (ret) {
-        case -1:
-            errormsg("%s error in kh_put()\n", __func__);
-            free((char*)sig);
-            return;
-        case 0:
+    switch (ret) {
+    case -1:
+        errormsg("%s error in kh_put()\n", __func__);
+        free((char*)fpath);
+        free((char*)sig);
+        return;
+    case 0:
 //            printd("-- %s key already present\n", __func__);
-            free((char*)sig);
-            dupes = kh_value(files, k);
-            break;
-        default:
-            dupes = kl_init(str);
-            kh_value(files, k) = dupes;
-            break;
-        }
-
-        *kl_pushp(str, dupes) = fpath;
+        free((char*)sig);
+        dupes = kh_value(files, k);
+        break;
+    default:
+        dupes = kl_init(str);
+        kh_value(files, k) = dupes;
+        break;
     }
+
+    *kl_pushp(str, dupes) = fpath;
 }
 
 void grokdir(const char *dir, khash_t(str) *files)
