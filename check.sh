@@ -9,12 +9,12 @@ test_symlink_file()
 #    set -x
     res=$($FD $D/two $D/symlink_two)
 #    set +x
-    assertEquals $? 0
+    assertEquals 0 $?
     exp=
     assertEquals "$exp" "$res"
 
     res=$($FD --symlinks $D/two $D/symlink_two)
-    assertEquals $? 0
+    assertEquals 0 $?
     exp=$(cat<<'END'
 testdir/two
 testdir/symlink_two
@@ -26,7 +26,7 @@ END
 test_big_file()
 {
     res=$($FD $D/big)
-    assertEquals $? 0
+    assertEquals 0 $?
     exp=$(cat<<'END'
 testdir/big/big2_copy
 testdir/big/big2
@@ -38,7 +38,7 @@ END
 test_unique()
 {
     res=$($FD --unique $D/big)
-    assertEquals $? 0
+    assertEquals 0 $?
     exp=$(cat<<'END'
 testdir/big/big1
 END
@@ -49,7 +49,7 @@ END
 test_recursive()
 {
     res=$($FD --recursive $D/)
-    assertEquals $? 0
+    assertEquals 0 $?
     exp=$(cat<<'END'
 testdir/two
 testdir/twice_one
