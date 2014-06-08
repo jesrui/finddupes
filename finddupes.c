@@ -94,8 +94,7 @@ char *normalizepath(const char *path)
 
 char *joinpath(const char *dir, const char *filename)
 {
-    char *fpath = (char*)malloc(strlen(dir)
-                                + strlen(filename)+2);
+    char *fpath = malloc(strlen(dir) + strlen(filename) + 2);
     strcpy(fpath, dir);
     int last = strlen(dir) - 1;
     if (last >= 0 && dir[last] != '/')

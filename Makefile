@@ -1,4 +1,4 @@
-CFLAGS = -Wall -O2 -g -I.
+CFLAGS = -Wall -std=c99 -D_BSD_SOURCE -O2 -g -I.
 OBJS = finddupes.o md5/md5.o
 
 # Use malloc wrappers to abort on failure? This works with gcc and clang
