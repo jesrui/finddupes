@@ -206,7 +206,7 @@ void grokfile(const char *fpath, khash_t(str) *files)
         const char *sig = getpartialsignature(fpath);
         if (!sig)
             return;
-//            printd("-- %s %s %u %s\n", __func__, sig, (unsigned)strlen(sig), fpath);
+//        printd("-- %s %s %u %s\n", __func__, sig, (unsigned)strlen(sig), fpath);
 
         int ret;
         khiter_t k = kh_put(str, files, sig, &ret);
@@ -469,29 +469,29 @@ void printfiles(khash_t(str) *files)
 int parseopts(int argc, char **argv)
 {
     static struct option long_options[] = {
-        { "omitfirst", 0, NULL, 'f' },
-        { "recursive", 0, NULL, 'r' },
-        { "quiet", 0, NULL, 'q' },
-        { "sameline", 0, NULL, '1' },
-        { "size", 0, NULL, 'S' },
-        { "unique", 0, NULL, 'u' },
-        { "symlinks", 0, NULL, 's' },
-        { "hardlinks", 0, NULL, 'H' },
-        { "relink", 0, NULL, 'l' },
-        { "noempty", 0, NULL, 'n' },
-        { "delete", 0, NULL, 'd' },
-        { "version", 0, NULL, 'v' },
-        { "help", 0, NULL, 'h' },
-        { "noprompt", 0, NULL, 'N' },
-        { "summarize", 0, NULL, 'm'},
-        { "summary", 0, NULL, 'm' },
-        { NULL, 0, NULL, 0 }
+        { "omitfirst",   0,   NULL,   'f' },
+        { "recursive",   0,   NULL,   'r' },
+        { "quiet",       0,   NULL,   'q' },
+        { "sameline",    0,   NULL,   '1' },
+        { "size",        0,   NULL,   'S' },
+        { "unique",      0,   NULL,   'u' },
+        { "symlinks",    0,   NULL,   's' },
+        { "hardlinks",   0,   NULL,   'H' },
+        { "relink",      0,   NULL,   'l' },
+        { "noempty",     0,   NULL,   'n' },
+        { "delete",      0,   NULL,   'd' },
+        { "version",     0,   NULL,   'v' },
+        { "help",        0,   NULL,   'h' },
+        { "noprompt",    0,   NULL,   'N' },
+        { "summarize",   0,   NULL,   'm'},
+        { "summary",     0,   NULL,   'm' },
+        { NULL,          0,   NULL,   0 }
     };
 
     int opt;
 
     while ((opt = getopt_long(argc, argv, "frRq1SusHlndvhNm", long_options,
-                NULL)) != EOF) {
+                              NULL)) != EOF) {
         switch (opt) {
         case 'f':
             flags |= F_OMITFIRST;
