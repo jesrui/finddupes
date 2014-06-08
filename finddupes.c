@@ -439,6 +439,24 @@ void freefiles(khash_t(str) *files)
         }
 }
 
+void printdupes(khash_t(str) *files)
+{
+    khint_t k;
+    for (k = kh_begin(files); k != kh_end(files); ++k)
+        if (kh_exist(files, k)) {
+            klist_t(str) *dupes = kh_value(files, k);
+            if (kl_begin(dupes) == kl_end(dupes) // empty?
+                || kl_next(kl_begin(dupes)) == kl_end(dupes)) { // size == 1?
+                continue;
+            }
+            kliter_t(str) *p;
+            for (p = kl_begin(dupes); p != kl_end(dupes); p = kl_next(p)) {
+                puts(kl_val(p));
+            }
+            putchar('\n');
+        }
+}
+
 int parseopts(int argc, char **argv)
 {
     static struct option long_options[] = {
@@ -565,8 +583,10 @@ int main(int argc, char **argv)
 
     mergechecked(files, checked_files);
 
-    printd("-- after mergechecked\n");
-    dumpfiles(files);
+//    printd("-- after mergechecked\n");
+//    dumpfiles(files);
+
+    printdupes(files);
 
     freefiles(checked_files);
     kh_destroy(str, checked_files);
