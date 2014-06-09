@@ -23,6 +23,48 @@ END
     assertEquals "$exp" "$res"
 }
 
+test_empty()
+{
+    res=$($FD $D/zero_a $D/zero_b)
+    assertEquals 0 $?
+    exp=$(cat<<'END'
+testdir/zero_a
+testdir/zero_b
+
+END
+)
+    assertEquals "$exp" "$res"
+
+    res=$($FD --noempty $D/zero_a $D/zero_b)
+    assertEquals 0 $?
+    exp=
+    assertEquals "$exp" "$res"
+}
+
+test_empty_symplink()
+{
+    res=$($FD $D/symlink_zero $D/zero_a $D/zero_b)
+    assertEquals 0 $?
+    exp=$(cat<<'END'
+testdir/zero_a
+testdir/zero_b
+
+END
+)
+    assertEquals "$exp" "$res"
+
+    res=$($FD --noempty $D/symlink_zero $D/zero_a $D/zero_b)
+    assertEquals 0 $?
+    exp=
+    assertEquals "$exp" "$res"
+
+    res=$($FD --noempty --symlink $D/symlink_zero $D/zero_a $D/zero_b)
+    assertEquals 0 $?
+    exp=
+    assertEquals "$exp" "$res"
+
+}
+
 test_big_file()
 {
     res=$($FD $D/big)

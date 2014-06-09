@@ -19,7 +19,6 @@
 //#define printd printf
 #define printd(...) /* nothing*/
 
-#define VERSION "0.1"
 #define CHUNK_SIZE 8192
 #define PARTIAL_MD5_SIZE 4096
 #define __str_free(x)
@@ -27,6 +26,7 @@
 KLIST_INIT(str, const char *, __str_free)
 KHASH_MAP_INIT_STR(str, klist_t(str)*)
 
+const char VERSION[] = "0.1";
 int flags;
 
 enum {
@@ -184,13 +184,13 @@ char *getpartialsignature(const char *filename)
 /**
  * @param fpath a heap allocated string; the function takes ownership of fpath
  */
-void grokfile(const char *fpath, khash_t(str) *files)
+void grokfile(const char *fpath, const struct stat *info, khash_t(str) *files)
 {
 //    printd("-- %s %s\n", __func__, fpath);
 
     struct stat linfo;
 
-    static char indicator[] = "-\\|/";
+    static const char indicator[] = "-\\|/";
     static int progress = 0;
     if (!(flags & F_HIDEPROGRESS)) {
         fprintf(stderr, "\rscanning files %c ", indicator[progress]);
@@ -204,6 +204,12 @@ void grokfile(const char *fpath, khash_t(str) *files)
 
     if (!(S_ISREG(linfo.st_mode)
         || (S_ISLNK(linfo.st_mode) && flags & F_FOLLOWLINKS))) {
+        printd("-- %s skipping non-regular or symlink file %s\n", __func__, fpath);
+        goto out2;
+    }
+
+    if (info->st_size == 0 && flags & F_EXCLUDEEMPTY) {
+        printd("-- %s skipping empty file %s\n", __func__, fpath);
         goto out2;
     }
 
@@ -284,7 +290,7 @@ void grokdir(const char *dir, khash_t(str) *files)
                 grokdir(fpath, files);
             free((char*)fpath);
         } else
-            grokfile(fpath, files);
+            grokfile(fpath, &info, files);
     }
     closedir(cd);
 }
@@ -581,7 +587,7 @@ int main(int argc, char **argv)
             grokdir(dir, files);
             free(dir);
         } else
-            grokfile(strdup(argv[i]), files);
+            grokfile(strdup(argv[i]), &info, files);
     }
 
     if (!(flags & F_HIDEPROGRESS))
