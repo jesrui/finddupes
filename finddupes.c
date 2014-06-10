@@ -30,7 +30,9 @@ KHASH_MAP_INIT_STR(str, klist_t(str)*)
 const char VERSION[] = "0.1";
 int flags;
 char *sep = "\n";
+size_t seplen = 1;
 char *setsep = "\n\n";
+size_t setseplen = 2;
 
 enum {
     F_OMITFIRST         =  1 << 1,
@@ -57,11 +59,12 @@ int fromhex(unsigned char c)
     return (int)(strchr(hexdigits, tolower(c)) - hexdigits);
 }
 
-char *unescapestr(char *s)
+char *unescapestr(char *s, size_t *len, int *err)
 {
     unsigned char *str = (unsigned char*)s;
     unsigned char *dest = str;
     unsigned char c;
+    int error = 0;
 
     while ((c = *str++)) {
         if (c == '\\') {
@@ -103,10 +106,13 @@ char *unescapestr(char *s)
                 int d = fromhex(*str++);
                 if (d != -1) {
                     int d2 = fromhex(*str++);
-                    if (d2 != -1)
+                    if (d2 != -1) {
                         *dest++ = 16*d + d2;
+                        break;
+                    }
                 }
-                break;
+                error = EINVAL;
+                goto out;
             }
             default:
                 if (c >= '0' && c < '8') {
@@ -115,9 +121,13 @@ char *unescapestr(char *s)
                     if (c >= '0' && c < '8') {
                         d = d*8 + c - '0';
                         c = *str++;
-                        if (c >= '0' && c < '8')
+                        if (c >= '0' && c < '8') {
                             *dest++ = d*8 + c - '0';
+                            break;
+                        }
                     }
+                    error = EINVAL;
+                    goto out;
                 } else {
                     *dest++ = '\\';
                     *dest++ = c;
@@ -126,7 +136,12 @@ char *unescapestr(char *s)
         } else
             *dest++ = c;
     }
+out:
     *dest = '\0';
+    if (len)
+        *len = (char*)dest - s;
+    if (err)
+        *err = error;
     return s;
 }
 
@@ -543,6 +558,12 @@ void freefiles(khash_t(str) *files)
         }
 }
 
+void putverbatim(const char *str, size_t len)
+{
+    while(len--)
+        putchar(*str++);
+}
+
 void printfiles(khash_t(str) *files)
 {
     khint_t k;
@@ -555,7 +576,7 @@ void printfiles(khash_t(str) *files)
         if (kl_next(kl_begin(dupes)) == kl_end(dupes)) { // size == 1?
             if (flags & F_UNIQUE) {
                 fputs(kl_val(kl_begin(dupes)), stdout);
-                fputs(sep, stdout);
+                putverbatim(sep, seplen);
             }
             continue;
         } else {
@@ -565,9 +586,9 @@ void printfiles(khash_t(str) *files)
             for (p = kl_begin(dupes); p != kl_end(dupes); p = kl_next(p)) {
                 fputs(kl_val(p), stdout);
                 if (kl_next(p) != kl_end(dupes))
-                    fputs(sep, stdout);
+                    putverbatim(sep, seplen);
             }
-            fputs(setsep, stdout);
+            putverbatim(setsep, setseplen);
         }
     }
 }
@@ -643,14 +664,32 @@ int parseopts(int argc, char **argv)
         case 'm':
             flags |= F_SUMMARIZEMATCHES;
             break;
-        case 'p':
+        case 'p': {
+            int err;
+            unescapestr(optarg, &seplen, &err);
+            printd("-p sep '%s' len %zu err %d\n", optarg, seplen, err);
+            if (err) {
+                errormsg("invalid format in separator string\n");
+                exit(1);
+            }
+            sep = malloc(seplen+1);
+            memcpy(sep, optarg, seplen+1);
             flags |= F_SEPARATOR;
-            sep = strdup(unescapestr(optarg));
             break;
-        case 'P':
+        }
+        case 'P': {
+            int err;
+            unescapestr(optarg, &setseplen, &err);
+            printd("-P setsep '%s' len %zu err %d\n", optarg, setseplen, err);
+            if (err) {
+                errormsg("invalid format in setseparator string\n");
+                exit(1);
+            }
+            setsep = malloc(setseplen+1);
+            memcpy(setsep, optarg, setseplen+1);
             flags |= F_SETSEPARATOR;
-            setsep = strdup(unescapestr(optarg));
             break;
+        }
 
         default:
             fprintf(stderr, "Try `finddupes --help' for more information.\n");

@@ -137,4 +137,16 @@ END
     assertEquals "$exp" "$res"
 }
 
+test_separator_null()
+{
+    res=$($FD --separator '\001' --setseparator '\x00' $D/two $D/twice_one | xxd)
+    assertEquals 0 $?
+    exp=$(cat<<'END'
+0000000: 7465 7374 6469 722f 7477 6f01 7465 7374  testdir/two.test
+0000010: 6469 722f 7477 6963 655f 6f6e 6500       dir/twice_one.
+END
+)
+    assertEquals "$exp" "$res"
+}
+
 . shunit2
