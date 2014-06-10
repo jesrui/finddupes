@@ -1,6 +1,7 @@
 // vim: tabstop=8 expandtab shiftwidth=4 softtabstop=4
 
 #include <assert.h>
+#include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
 #include <getopt.h>
@@ -28,22 +29,106 @@ KHASH_MAP_INIT_STR(str, klist_t(str)*)
 
 const char VERSION[] = "0.1";
 int flags;
+char *sep = "\n";
+char *setsep = "\n\n";
 
 enum {
-    F_OMITFIRST         = 1 << 1,
-    F_RECURSE           = 1 << 2,
-    F_HIDEPROGRESS      = 1 << 3,
-    F_DSAMELINE         = 1 << 4,
-    F_SHOWSIZE          = 1 << 5,
-    F_FOLLOWLINKS       = 1 << 6,
-    F_CONSIDERHARDLINKS = 1 << 7,
-    F_EXCLUDEEMPTY      = 1 << 8,
-    F_DELETEFILES       = 1 << 9,
-    F_NOPROMPT          = 1 << 10,
-    F_SUMMARIZEMATCHES  = 1 << 11,
-    F_UNIQUE            = 1 << 12,
+    F_OMITFIRST         =  1 << 1,
+    F_RECURSE           =  1 << 2,
+    F_HIDEPROGRESS      =  1 << 3,
+    F_DSAMELINE         =  1 << 4,
+    F_SHOWSIZE          =  1 << 5,
+    F_FOLLOWLINKS       =  1 << 6,
+    F_CONSIDERHARDLINKS =  1 << 7,
+    F_EXCLUDEEMPTY      =  1 << 8,
+    F_DELETEFILES       =  1 << 9,
+    F_NOPROMPT          =  1 << 10,
+    F_SUMMARIZEMATCHES  =  1 << 11,
+    F_UNIQUE            =  1 << 12,
+    F_SEPARATOR         =  1 << 13,
+    F_SETSEPARATOR      =  1 << 14,
 };
 
+int fromhex(unsigned char c)
+{
+    if (!isxdigit(c))
+        return -1;
+    static const char hexdigits[] = "0123456789abcdef";
+    return (int)(strchr(hexdigits, tolower(c)) - hexdigits);
+}
+
+char *unescapestr(char *s)
+{
+    unsigned char *str = (unsigned char*)s;
+    unsigned char *dest = str;
+    unsigned char c;
+
+    while ((c = *str++)) {
+        if (c == '\\') {
+            switch (c = *str++) {
+            case 'a':
+                *dest++ = '\a';
+                break;
+            case 'b':
+                *dest++ = '\b';
+                break;
+            case 'f':
+                *dest++ = '\f';
+                break;
+            case 'n':
+                *dest++ = '\n';
+                break;
+            case 'r':
+                *dest++ = '\r';
+                break;
+            case 't':
+                *dest++ = '\t';
+                break;
+            case 'v':
+                *dest++ = '\v';
+                break;
+            case '\\':
+                *dest++ = '\\';
+                break;
+            case '\'':
+                *dest++ = '\'';
+                break;
+            case '\"':
+                *dest++ = '\"';
+                break;
+            case '\?':
+                *dest++ = '\?';
+                break;
+            case 'x': {
+                int d = fromhex(*str++);
+                if (d != -1) {
+                    int d2 = fromhex(*str++);
+                    if (d2 != -1)
+                        *dest++ = 16*d + d2;
+                }
+                break;
+            }
+            default:
+                if (c >= '0' && c < '8') {
+                    int d = c - '0';
+                    c = *str++;
+                    if (c >= '0' && c < '8') {
+                        d = d*8 + c - '0';
+                        c = *str++;
+                        if (c >= '0' && c < '8')
+                            *dest++ = d*8 + c - '0';
+                    }
+                } else {
+                    *dest++ = '\\';
+                    *dest++ = c;
+                }
+            }
+        } else
+            *dest++ = c;
+    }
+    *dest = '\0';
+    return s;
+}
 
 void errormsg(const char *message, ...)
 {
@@ -67,7 +152,7 @@ void usage(void)
           " -n --noempty     \texclude zero-length files from consideration\n"
           " -f --omitfirst   \tomit the first file in each set of matches\n"
           " -1 --sameline    \tlist each set of matches on a single line\n"
-          " -S --size        \tshow size of duplicate files\n"
+          " -S --size        \tshow also size of duplicate files\n"
           " -u --unique      \tlist only files that don't have duplicates\n"
           " -m --summarize   \tsummarize dupe information\n"
           " -q --quiet       \thide progress indicator\n"
@@ -81,6 +166,8 @@ void usage(void)
           " -N --noprompt    \ttogether with --delete, preserve the first file in\n"
           "                  \teach set of duplicates and delete the rest without\n"
           "                  \tprompting the user\n"
+          " -p --separator=sep\tseparate files with sep string instead of '\\n'\n"
+          " -P --setseparator=sep  separate sets with sep string instead of '\\n\\n'\n"
           " -v --version     \tdisplay finddupes version\n"
           " -h --help        \tdisplay this help message\n", stderr);
 }
@@ -203,7 +290,7 @@ void grokfile(const char *fpath, const struct stat *info, khash_t(str) *files)
     }
 
     if (!(S_ISREG(linfo.st_mode)
-        || (S_ISLNK(linfo.st_mode) && flags & F_FOLLOWLINKS))) {
+            || (S_ISLNK(linfo.st_mode) && flags & F_FOLLOWLINKS))) {
         printd("-- %s skipping non-regular or symlink file %s\n", __func__, fpath);
         goto out2;
     }
@@ -466,17 +553,21 @@ void printfiles(khash_t(str) *files)
         if (kl_begin(dupes) == kl_end(dupes))
             continue;
         if (kl_next(kl_begin(dupes)) == kl_end(dupes)) { // size == 1?
-            if (flags & F_UNIQUE)
-                puts(kl_val(kl_begin(dupes)));
+            if (flags & F_UNIQUE) {
+                fputs(kl_val(kl_begin(dupes)), stdout);
+                fputs(sep, stdout);
+            }
             continue;
         } else {
             if (flags & F_UNIQUE)
                 continue;
             kliter_t(str) *p;
             for (p = kl_begin(dupes); p != kl_end(dupes); p = kl_next(p)) {
-                puts(kl_val(p));
+                fputs(kl_val(p), stdout);
+                if (kl_next(p) != kl_end(dupes))
+                    fputs(sep, stdout);
             }
-            putchar('\n');
+            fputs(setsep, stdout);
         }
     }
 }
@@ -484,29 +575,31 @@ void printfiles(khash_t(str) *files)
 int parseopts(int argc, char **argv)
 {
     static struct option long_options[] = {
-        { "omitfirst",   0,   NULL,   'f' },
-        { "recursive",   0,   NULL,   'r' },
-        { "quiet",       0,   NULL,   'q' },
-        { "sameline",    0,   NULL,   '1' },
-        { "size",        0,   NULL,   'S' },
-        { "unique",      0,   NULL,   'u' },
-        { "symlinks",    0,   NULL,   's' },
-        { "hardlinks",   0,   NULL,   'H' },
-        { "relink",      0,   NULL,   'l' },
-        { "noempty",     0,   NULL,   'n' },
-        { "delete",      0,   NULL,   'd' },
-        { "version",     0,   NULL,   'v' },
-        { "help",        0,   NULL,   'h' },
-        { "noprompt",    0,   NULL,   'N' },
-        { "summarize",   0,   NULL,   'm'},
-        { "summary",     0,   NULL,   'm' },
-        { NULL,          0,   NULL,   0 }
+        { "omitfirst",     0,                  NULL,  'f' },
+        { "recursive",     0,                  NULL,  'r' },
+        { "quiet",         0,                  NULL,  'q' },
+        { "sameline",      0,                  NULL,  '1' },
+        { "size",          0,                  NULL,  'S' },
+        { "unique",        0,                  NULL,  'u' },
+        { "symlinks",      0,                  NULL,  's' },
+        { "hardlinks",     0,                  NULL,  'H' },
+        { "relink",        0,                  NULL,  'l' },
+        { "noempty",       0,                  NULL,  'n' },
+        { "delete",        0,                  NULL,  'd' },
+        { "version",       0,                  NULL,  'v' },
+        { "help",          0,                  NULL,  'h' },
+        { "noprompt",      0,                  NULL,  'N' },
+        { "summarize",     0,                  NULL,  'm' },
+        { "summary",       0,                  NULL,  'm' },
+        { "separator",     required_argument,  NULL,  'p' },
+        { "setseparator",  required_argument,  NULL,  'P' },
+        { NULL,            0,                  NULL,  0 }
     };
 
     int opt;
 
-    while ((opt = getopt_long(argc, argv, "frRq1SusHlndvhNm", long_options,
-                              NULL)) != EOF) {
+    while ((opt = getopt_long(argc, argv, "frRq1SusHlndvhNmp:P:",
+                              long_options, NULL)) != EOF) {
         switch (opt) {
         case 'f':
             flags |= F_OMITFIRST;
@@ -550,6 +643,14 @@ int parseopts(int argc, char **argv)
         case 'm':
             flags |= F_SUMMARIZEMATCHES;
             break;
+        case 'p':
+            flags |= F_SEPARATOR;
+            sep = strdup(unescapestr(optarg));
+            break;
+        case 'P':
+            flags |= F_SETSEPARATOR;
+            setsep = strdup(unescapestr(optarg));
+            break;
 
         default:
             fprintf(stderr, "Try `finddupes --help' for more information.\n");
@@ -567,6 +668,7 @@ int parseopts(int argc, char **argv)
 
 int main(int argc, char **argv)
 {
+//    printf("unsescape %s\n", unescapestr(argv[1]));
 //    test_klist();
 //    return 0;
 
@@ -621,6 +723,11 @@ int main(int argc, char **argv)
 
     freefiles(files);
     kh_destroy(str, files);
+
+    if (flags & F_SEPARATOR)
+        free(sep);
+    if (flags & F_SETSEPARATOR)
+        free(setsep);
 
     return 0;
 }
