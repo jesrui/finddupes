@@ -149,4 +149,19 @@ END
     assertEquals "$exp" "$res"
 }
 
+test_omitfirst()
+{
+    res=$($FD -f $D/recursed_a/ $D/recursed_b/
+    )
+    assertEquals 0 $?
+    exp=$(cat<<'END'
+testdir/recursed_b/one
+
+testdir/recursed_b/two_plus_one
+
+END
+)
+    assertEquals "$exp" "$res"
+}
+
 . shunit2

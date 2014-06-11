@@ -584,6 +584,8 @@ void printfiles(khash_t(str) *files)
                 continue;
             kliter_t(str) *p;
             for (p = kl_begin(dupes); p != kl_end(dupes); p = kl_next(p)) {
+                if (flags & F_OMITFIRST && p == kl_begin(dupes))
+                    continue;
                 fputs(kl_val(p), stdout);
                 if (kl_next(p) != kl_end(dupes))
                     putverbatim(sep, seplen);
