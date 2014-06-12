@@ -209,17 +209,8 @@ char *joinpath(const char *dir, const char *filename)
     return fpath;
 }
 
-off_t filesize(const char *filename)
-{
-    struct stat s;
-    if (stat(filename, &s) != 0) {
-        errormsg("stat failed: %s: %s\n", filename, strerror(errno));
-        return -1;
-    }
-    return s.st_size;
-}
-
-char *getsignatureuntil(const char *filename, off_t max_read)
+char *getsignatureuntil(const char *filename, off_t max_read,
+                        const struct stat *info)
 {
 //    printd("-- %s filename %s\n", __func__, filename);
 
@@ -233,7 +224,7 @@ char *getsignatureuntil(const char *filename, off_t max_read)
 
     md5_init(&state);
 
-    fsize = filesize(filename);
+    fsize = info->st_size;
 
     if (max_read != 0 && fsize > max_read)
         fsize = max_read;
@@ -273,14 +264,14 @@ char *getsignatureuntil(const char *filename, off_t max_read)
     return strdup(signature);
 }
 
-char *getfullsignature(const char *filename)
+char *getfullsignature(const char *filename, const struct stat *info)
 {
-    return getsignatureuntil(filename, 0);
+    return getsignatureuntil(filename, 0, info);
 }
 
-char *getpartialsignature(const char *filename)
+char *getpartialsignature(const char *filename, const struct stat *info)
 {
-    return getsignatureuntil(filename, PARTIAL_MD5_SIZE);
+    return getsignatureuntil(filename, PARTIAL_MD5_SIZE, info);
 }
 
 /**
@@ -315,7 +306,7 @@ void grokfile(const char *fpath, const struct stat *info, khash_t(str) *files)
         goto out2;
     }
 
-    const char *sig = getpartialsignature(fpath);
+    const char *sig = getpartialsignature(fpath, info);
     if (!sig) {
         goto out2;
     }
@@ -415,11 +406,17 @@ void checkdupes(khint_t k, khash_t(str) *files, khash_t(str) *checked_files)
 
     const char *partsig = kh_key(files, k); // partial signature
     klist_t(str) *filtered_dupes = kl_init(str);
+    struct stat info;
 
     for (p = kl_begin(dupes); p != kl_end(dupes); p = kl_next(p)) {
         const char *fpath = kl_val(p);
 
-        const char *fullsig = getfullsignature(fpath);
+        if (stat(fpath, &info) == -1) {
+            errormsg("stat failed: %s: %s\n", fpath, strerror(errno));
+            continue;
+        }
+
+        const char *fullsig = getfullsignature(fpath, &info);
         if (!fullsig)
             continue;
 
