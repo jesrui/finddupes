@@ -224,6 +224,9 @@ char *getsignatureuntil(const char *filename, off_t max_read,
 
     md5_init(&state);
 
+    // include file size in the signature
+    md5_append(&state, (md5_byte_t*)(&info->st_size), sizeof(info->st_size));
+
     fsize = info->st_size;
 
     if (max_read != 0 && fsize > max_read)
