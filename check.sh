@@ -1,7 +1,7 @@
 #!/bin/bash
 
 FD=./finddupes
-FD="valgrind --leak-check=full --error-exitcode=1 ./finddupes"
+FD="valgrind --quiet --leak-check=full --error-exitcode=1 ./finddupes"
 D=testdir
 
 oneTimeSetUp()

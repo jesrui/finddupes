@@ -518,7 +518,7 @@ void checkinodes(khint_t k, khash_t(str) *files)
         else {
             if (flags & F_FOLLOWLINKS) {
                 if (lstat(fpath, &info) == -1) {
-                    errormsg("stat failed: %s: %s\n", fpath, strerror(errno));
+                    errormsg("lstat failed: %s: %s\n", fpath, strerror(errno));
                     free((char*)fpath);
                     continue;
                 }
@@ -526,12 +526,12 @@ void checkinodes(khint_t k, khash_t(str) *files)
                     //  duped symlinks are always listed if the --symlinks
                     //  option is set
                     *kl_pushp(str, filtered_dupes) = fpath;
+                    continue;
                 }
-            } else {
-                printd("-- %s inode %llu already seen, removing %s from dupes\n",
-                    __func__, (unsigned long long)(info.st_ino), fpath);
-                free((char*)fpath);
             }
+            printd("-- %s inode %llu already seen, removing %s from dupes\n",
+                __func__, (unsigned long long)(info.st_ino), fpath);
+            free((char*)fpath);
         }
     }
 
