@@ -4,6 +4,16 @@ FD=./finddupes
 FD="valgrind --leak-check=full --error-exitcode=1 ./finddupes"
 D=testdir
 
+oneTimeSetUp()
+{
+    ln $D/two $D/hardlink_two
+}
+
+oneTimeTearDown()
+{
+    test -a $D/hardlink_two && rm $D/hardlink_two
+}
+
 test_symlink_file()
 {
 #    set -x
@@ -18,6 +28,23 @@ test_symlink_file()
     exp=$(cat<<'END'
 testdir/two
 testdir/symlink_two
+END
+)
+    assertEquals "$exp" "$res"
+}
+
+test_hardlink_file()
+{
+    res=$($FD $D/two $D/hardlink_two)
+    assertEquals 0 $?
+    exp=
+    assertEquals "$exp" "$res"
+
+    res=$($FD --hardlinks $D/two $D/hardlink_two)
+    assertEquals 0 $?
+    exp=$(cat<<'END'
+testdir/two
+testdir/hardlink_two
 END
 )
     assertEquals "$exp" "$res"

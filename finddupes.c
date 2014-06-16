@@ -17,14 +17,21 @@
 #include "klib/klist.h"
 #include "md5/md5.h"
 
-//#define printd printf
+//#define printd(...) fprintf(stderr, __VA_ARGS__)
 #define printd(...) /* nothing*/
 
 #define CHUNK_SIZE 8192
 #define PARTIAL_MD5_SIZE 4096
-#define __str_free(x)
+#define __nop_free(x)
 
-KLIST_INIT(str, const char *, __str_free)
+struct inodev
+{
+    ino_t ino;
+    dev_t dev;
+};
+
+KLIST_INIT(str, const char *, __nop_free)
+KLIST_INIT(inodev, struct inodev, __nop_free)
 KHASH_MAP_INIT_STR(str, klist_t(str)*)
 
 const char VERSION[] = "0.1";
@@ -464,6 +471,74 @@ void checkdupes(khint_t k, khash_t(str) *files, khash_t(str) *checked_files)
         kl_destroy(str, filtered_dupes);
     } else // replace files entry at k
         kh_value(files, k) = filtered_dupes;
+
+    kl_destroy(str, dupes);
+}
+
+/**
+ * remove from the list at k all paths pointing to the same inode and device,
+ * except the first occurrence
+ */
+void checkinodes(khint_t k, khash_t(str) *files)
+{
+//    printd("%s files[%s]\n", __func__, kh_key(files, k));
+    klist_t(str) *dupes = kh_value(files, k);
+    kliter_t(str) *p;
+
+    if (kl_begin(dupes) == kl_end(dupes) // empty?
+            || kl_next(kl_begin(dupes)) == kl_end(dupes)) { // size == 1?
+//        printd("%s no dupes for %s\n", __func__, kh_key(files, k));
+        return;
+    }
+
+    struct stat info;
+    klist_t(inodev) *inodes = kl_init(inodev);
+    klist_t(str) *filtered_dupes = kl_init(str);
+
+    for (p = kl_begin(dupes); p != kl_end(dupes); p = kl_next(p)) {
+        const char *fpath = kl_val(p);
+
+        if (stat(fpath, &info) == -1) {
+            errormsg("stat failed: %s: %s\n", fpath, strerror(errno));
+            continue;
+        }
+
+        kliter_t(inodev) *i;
+        for (i = kl_begin(inodes); i != kl_end(inodes); i = kl_next(i))
+            if (kl_val(i).ino == info.st_ino && kl_val(i).dev == info.st_dev)
+                break;
+
+        if (i == kl_end(inodes)) {
+            printd("-- %s found new inode %llu pointing at %s\n",
+                __func__, (unsigned long long)(info.st_ino), fpath);
+            struct inodev id = { info.st_ino, info.st_dev };
+            *kl_pushp(inodev, inodes) = id;
+            *kl_pushp(str, filtered_dupes) = fpath;
+        }
+        else {
+            if (flags & F_FOLLOWLINKS) {
+                if (lstat(fpath, &info) == -1) {
+                    errormsg("stat failed: %s: %s\n", fpath, strerror(errno));
+                    free((char*)fpath);
+                    continue;
+                }
+                if (S_ISLNK(info.st_mode)) {
+                    //  duped symlinks are always listed if the --symlinks
+                    //  option is set
+                    *kl_pushp(str, filtered_dupes) = fpath;
+                }
+            } else {
+                printd("-- %s inode %llu already seen, removing %s from dupes\n",
+                    __func__, (unsigned long long)(info.st_ino), fpath);
+                free((char*)fpath);
+            }
+        }
+    }
+
+    // replace files entry at k
+    kh_value(files, k) = filtered_dupes;
+
+    kl_destroy(inodev, inodes);
     kl_destroy(str, dupes);
 }
 
@@ -709,7 +784,6 @@ int parseopts(int argc, char **argv)
 
 int main(int argc, char **argv)
 {
-//    printf("unsescape %s\n", unescapestr(argv[1]));
 //    test_klist();
 //    return 0;
 
@@ -755,6 +829,15 @@ int main(int argc, char **argv)
     mergechecked(files, checked_files);
 
 //    printd("-- after mergechecked\n");
+//    dumpfiles(files);
+
+    if (!(flags & F_CONSIDERHARDLINKS))
+        for (k = kh_begin(files); k != kh_end(files); ++k)
+            if (kh_exist(files, k)) {
+                checkinodes(k, files);
+            }
+
+//    printd("-- after checkinodes\n");
 //    dumpfiles(files);
 
     printfiles(files);
