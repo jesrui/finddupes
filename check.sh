@@ -33,6 +33,50 @@ END
     assertEquals "$exp" "$res"
 }
 
+test_symlink_dir()
+{
+    res=$($FD --symlinks $D/recursed_a $D/symlink_dir)
+    assertEquals 0 $?
+    exp=$(cat<<'END'
+testdir/recursed_a/symlink_seven
+testdir/symlink_dir/symlink_seven
+
+END
+)
+    assertEquals "$exp" "$res"
+
+    res=$($FD --symlinks --hardlinks $D/recursed_a $D/symlink_dir)
+    assertEquals 0 $?
+    exp=$(cat<<'END'
+testdir/recursed_a/symlink_seven
+testdir/symlink_dir/symlink_seven
+
+testdir/recursed_a/one
+testdir/symlink_dir/one
+
+testdir/recursed_a/two
+testdir/symlink_dir/two
+
+testdir/recursed_a/five
+testdir/symlink_dir/five
+
+END
+)
+    assertEquals "$exp" "$res"
+}
+
+test_symlink_broken()
+{
+    res=$($FD --quiet --symlinks $D/symlink_broken 2>&1 >/dev/null)
+    assertEquals 0 $?
+    exp=$(cat<<'END'
+stat failed: testdir/symlink_broken: No such file or directory
+
+END
+)
+    assertEquals "$exp" "$res"
+}
+
 test_hardlink_file()
 {
     res=$($FD $D/two $D/hardlink_two)
@@ -178,8 +222,7 @@ END
 
 test_omitfirst()
 {
-    res=$($FD -f $D/recursed_a/ $D/recursed_b/
-    )
+    res=$($FD -f $D/recursed_a/ $D/recursed_b/)
     assertEquals 0 $?
     exp=$(cat<<'END'
 testdir/recursed_b/two_plus_one
