@@ -45,17 +45,12 @@ enum {
     F_OMITFIRST         =  1 << 1,
     F_RECURSE           =  1 << 2,
     F_HIDEPROGRESS      =  1 << 3,
-    F_DSAMELINE         =  1 << 4,
-    F_SHOWSIZE          =  1 << 5,
-    F_FOLLOWLINKS       =  1 << 6,
-    F_CONSIDERHARDLINKS =  1 << 7,
-    F_EXCLUDEEMPTY      =  1 << 8,
-    F_DELETEFILES       =  1 << 9,
-    F_NOPROMPT          =  1 << 10,
-    F_SUMMARIZEMATCHES  =  1 << 11,
-    F_UNIQUE            =  1 << 12,
-    F_SEPARATOR         =  1 << 13,
-    F_SETSEPARATOR      =  1 << 14,
+    F_FOLLOWLINKS       =  1 << 4,
+    F_CONSIDERHARDLINKS =  1 << 5,
+    F_EXCLUDEEMPTY      =  1 << 6,
+    F_UNIQUE            =  1 << 7,
+    F_SEPARATOR         =  1 << 8,
+    F_SETSEPARATOR      =  1 << 9,
 };
 
 int fromhex(unsigned char c)
@@ -162,32 +157,17 @@ void errormsg(const char *message, ...)
 
 void usage(void)
 {
-    fputs("usage: finddupes PATH...\n\n"
+    fputs("usage: finddupes [options] PATH...\n\n"
           " -r --recurse     \tfor every directory given follow subdirectories\n"
           "                  \tencountered within\n"
-          " -R --recurse:    \tfor each directory given after this option follow\n"
-          "                  \tsubdirectories encountered within\n"
           " -s --symlinks    \tfollow symlinks\n"
           " -H --hardlinks   \tnormally, when two or more files point to the same\n"
           "                  \tdisk area they are treated as non-duplicates; this\n"
           "                  \toption will change this behavior\n"
           " -n --noempty     \texclude zero-length files from consideration\n"
           " -f --omitfirst   \tomit the first file in each set of matches\n"
-          " -1 --sameline    \tlist each set of matches on a single line\n"
-          " -S --size        \tshow also size of duplicate files\n"
           " -u --unique      \tlist only files that don't have duplicates\n"
-          " -m --summarize   \tsummarize dupe information\n"
           " -q --quiet       \thide progress indicator\n"
-          " -d --delete      \tprompt user for files to preserve and delete all\n"
-          "                  \tothers; important: under particular circumstances,\n"
-          "                  \tdata may be lost when using this option together\n"
-          "                  \twith -s or --symlinks, or when specifying a\n"
-          "                  \tparticular directory more than once; refer to the\n"
-          "                  \tfdupes documentation for additional information\n"
-          " -l --relink      \t(description)\n"
-          " -N --noprompt    \ttogether with --delete, preserve the first file in\n"
-          "                  \teach set of duplicates and delete the rest without\n"
-          "                  \tprompting the user\n"
           " -p --separator=sep\tseparate files with sep string instead of '\\n'\n"
           " -P --setseparator=sep  separate sets with sep string instead of '\\n\\n'\n"
           " -v --version     \tdisplay finddupes version\n"
@@ -676,19 +656,12 @@ int parseopts(int argc, char **argv)
         { "omitfirst",     0,                  NULL,  'f' },
         { "recursive",     0,                  NULL,  'r' },
         { "quiet",         0,                  NULL,  'q' },
-        { "sameline",      0,                  NULL,  '1' },
-        { "size",          0,                  NULL,  'S' },
         { "unique",        0,                  NULL,  'u' },
         { "symlinks",      0,                  NULL,  's' },
         { "hardlinks",     0,                  NULL,  'H' },
-        { "relink",        0,                  NULL,  'l' },
         { "noempty",       0,                  NULL,  'n' },
-        { "delete",        0,                  NULL,  'd' },
         { "version",       0,                  NULL,  'v' },
         { "help",          0,                  NULL,  'h' },
-        { "noprompt",      0,                  NULL,  'N' },
-        { "summarize",     0,                  NULL,  'm' },
-        { "summary",       0,                  NULL,  'm' },
         { "separator",     required_argument,  NULL,  'p' },
         { "setseparator",  required_argument,  NULL,  'P' },
         { NULL,            0,                  NULL,  0 }
@@ -696,7 +669,7 @@ int parseopts(int argc, char **argv)
 
     int opt;
 
-    while ((opt = getopt_long(argc, argv, "frRq1SusHlndvhNmp:P:",
+    while ((opt = getopt_long(argc, argv, "frqusHnvhp:P:",
                               long_options, NULL)) != EOF) {
         switch (opt) {
         case 'f':
@@ -707,12 +680,6 @@ int parseopts(int argc, char **argv)
             break;
         case 'q':
             flags |= F_HIDEPROGRESS;
-            break;
-        case '1':
-            flags |= F_DSAMELINE;
-            break;
-        case 'S':
-            flags |= F_SHOWSIZE;
             break;
         case 'u':
             flags |= F_UNIQUE;
@@ -726,21 +693,12 @@ int parseopts(int argc, char **argv)
         case 'n':
             flags |= F_EXCLUDEEMPTY;
             break;
-        case 'd':
-            flags |= F_DELETEFILES;
-            break;
         case 'v':
             printf("finddupes %s\n", VERSION);
             exit(0);
         case 'h':
             usage();
             exit(1);
-        case 'N':
-            flags |= F_NOPROMPT;
-            break;
-        case 'm':
-            flags |= F_SUMMARIZEMATCHES;
-            break;
         case 'p': {
             int err;
             unescapestr(optarg, &seplen, &err);
