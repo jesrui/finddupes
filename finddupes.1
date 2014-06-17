@@ -1,32 +1,27 @@
-.TH FDUPES 1
-.\" NAME should be all caps, SECTION should be 1-8, maybe w/ subsection
-.\" other parms are allowed: see man(7), man(1)
+.TH FINDDUPES 1
 .SH NAME
-fdupes \- finds duplicate files in a given set of directories
+finddupes \- finds duplicate files in a given set of directories
+
 .SH SYNOPSIS
-.B fdupes
+.B finddupes
 [
 .I options
 ]
-.I DIRECTORY
+.I PATH
 \|.\|.\|.
 
 .SH "DESCRIPTION"
-Searches the given path for duplicate files. Such files are found by
-comparing file sizes and MD5 signatures, followed by a 
-byte-by-byte comparison.
+Searches the given paths for duplicate files. Such files are found by
+comparing file sizes and MD5 signatures.
 
 .SH OPTIONS
 .TP
-.B -r --recurse
+.B -r --recursive
 for every directory given follow subdirectories encountered within
 .TP
-.B -R --recurse:
-for each directory given after this option follow subdirectories
-encountered within
-.TP
 .B -s --symlinks
-follow symlinked directories and compare files pointed to by their links; normally symlinked directories and files are skipped
+follow symlinked directories and compare files pointed to by their links;
+normally symlinked directories and files are skipped
 .TP
 .B -H --hardlinks
 normally, when two or more files point to the same disk area they are
@@ -38,76 +33,94 @@ exclude zero-length files from consideration
 .B -f --omitfirst
 omit the first file in each set of matches
 .TP
-.B -1 --sameline
-list each set of matches on a single line
-.TP
-.B -S --size
-show size of duplicate files
+.B -u --unique
+list only files that don't have duplicates
 .TP
 .B -q --quiet
 hide progress indicator
 .TP
-.B -d --delete
-prompt user for files to preserve, deleting all others (see
-.B CAVEATS
-below)
+.B -p --separator=sep
+separate files with sep string instead of '\\n'
 .TP
-.B -N --noprompt
-when used together with --delete, preserve the first file in each
-set of duplicates and delete the others without prompting the user 
+.B -P --setseparator=sep
+separate sets with sep string instead of '\\n\\n'
 .TP
 .B -v --version
-display fdupes version
+display finddupes version and exit
 .TP
 .B -h --help
-displays help
-.SH "SEE ALSO"
-.\" Always quote multiple words for .SH
-.BR md5sum (1)
+display this help and exit
+
 .SH NOTES
 Unless
-.B -1
+.B --separator
 or
-.B --sameline
-is specified, duplicate files are listed
+.B --setseparator
+are specified, duplicate files are listed
 together in groups, each file displayed on a separate line. The
 groups are then separated from each other by blank lines.
 
-When
-.B -1
-or
-.B --sameline
-is specified, spaces and backslash characters  (\fB\e\fP) appearing
-in a filename are preceded by a backslash character.
-.SH CAVEATS
-If fdupes returns with an error message such as
-.B fdupes: error invoking md5sum
-it means the program has been compiled to use an external
-program to calculate MD5 signatures (otherwise, fdupes uses
-interal routines for this purpose), and an error has occurred
-while attempting to execute it. If this is the case, the 
-specified program should be properly installed prior 
-to running fdupes.
+.SH EXAMPLES
+Remove all duplicate files in a directory tree, ask for individual
+confirmation on each file.
 
-When using
-.B \-d
-or
-.BR \-\-delete ,
-care should be taken to insure against
-accidental data loss.
+NOTE that this works only if filenames do not contain '\\n', '\\x00' or '\\x01'.
 
-When used together with options
-.B \-s
-or
-.BR \-\-symlink ,
-a user could accidentally
-preserve a symlink while deleting the file it points to.
+.fam C
+finddupes -r --separator '\\x01' --setseparator '\\x00' someDir |
+    xargs -0 -n1 -I{} sh -c '
+        s=$(echo {} | tr "\\001" "\\n"); echo -e "$s"; \\
+        echo -n {} | tr "\\001" "\\000" | xargs -0pr -n1 rm'
+.fam T
 
-Furthermore, when specifying a particular directory more than
-once, all files within that directory will be listed as their
-own duplicates, leading to data loss should a user preserve a
-file without its "duplicate" (the file itself!).
+Preserve files in a good tree, remove duplicates elsewhere.
+Say you want to look for dupes in two trees,
+.BR goodTree
+and
+.BR badTree ,
+and, in
+case of duplicates, you want to preserve a copy in
+.BR goodTree
+and remove any other dupes. Note that, in each set, files inside the first tree
+appear before files inside the second one. The order in which duplicate sets
+are printed is not determined though.
 
-.SH AUTHOR
-Adrian Lopez <adrian2@caribe.net>
+NOTE that this removes files without confirmation.
 
+.fam C
+finddupes -r --omitfirst -p '\\x00' -P '\\x00' goodTree badTree |
+    xargs -0 rm
+.fam T
+
+Find out how much disk space is occupied by duplicate files:
+
+.fam C
+finddupes -rf -p '\\x01' -P '\\x00' someDir/ |
+    xargs -0 -n1 -I{} sh -c '
+        echo -n {} | tr "\\001" "\\000" | xargs -0r du -csh'
+.fam T
+
+Or, more compact, with a grand total but without detailing the usage of each
+set:
+
+.fam C
+finddupes -rf -p '\\x00' -P '\\x00' someDir/ | xargs -0 du -ch
+.fam T
+
+List files without duplicates whose contents are present in
+.BR treeA
+but not in
+.BR treeB :
+
+.fam C
+finddupes --recursive --unique treeA treeB | grep '^treeA/'
+.fam T
+
+.SH BUGS
+If you find a bug, please report it via <http://github.com/jesrui/finddupes/issues>.
+
+.SH ACKNOWLEDGEMENTS
+.B finddupes
+draws heavily from
+.B fdupes
+<https://github.com/adrianlopezroche/fdupes>.
