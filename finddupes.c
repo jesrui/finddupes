@@ -41,14 +41,13 @@
 #include "md5/md5.h"
 
 //#define printd(...) fprintf(stderr, __VA_ARGS__)
-#define printd(...) /* nothing*/
+#define printd(...) /* nothing */
 
 #define CHUNK_SIZE 8192
 #define PARTIAL_MD5_SIZE 4096
 #define __nop_free(x)
 
-struct inodev
-{
+struct inodev {
     ino_t ino;
     dev_t dev;
 };
@@ -181,7 +180,7 @@ void errormsg(const char *message, ...)
 void usage(void)
 {
     fputs("usage: finddupes [options] PATH...\n\n"
-          " -r --recurse     \tfor every directory given follow subdirectories\n"
+          " -r --recursive   \tfor every directory given follow subdirectories\n"
           "                  \tencountered within\n"
           " -s --symlinks    \tfollow symlinks\n"
           " -H --hardlinks   \tnormally, when two or more files point to the same\n"
@@ -513,12 +512,11 @@ void checkinodes(khint_t k, khash_t(str) *files)
 
         if (i == kl_end(inodes)) {
             printd("-- %s found new inode %llu pointing at %s\n",
-                __func__, (unsigned long long)(info.st_ino), fpath);
+                   __func__, (unsigned long long)(info.st_ino), fpath);
             struct inodev id = { info.st_ino, info.st_dev };
             *kl_pushp(inodev, inodes) = id;
             *kl_pushp(str, filtered_dupes) = fpath;
-        }
-        else {
+        } else {
             if (flags & F_FOLLOWLINKS) {
                 if (lstat(fpath, &info) == -1) {
                     errormsg("lstat failed: %s: %s\n", fpath, strerror(errno));
@@ -533,7 +531,7 @@ void checkinodes(khint_t k, khash_t(str) *files)
                 }
             }
             printd("-- %s inode %llu already seen, removing %s from dupes\n",
-                __func__, (unsigned long long)(info.st_ino), fpath);
+                   __func__, (unsigned long long)(info.st_ino), fpath);
             free((char*)fpath);
         }
     }
@@ -577,32 +575,6 @@ void mergechecked(khash_t(str) *files, khash_t(str) *checked_files)
         }
     }
     kh_clear(str, checked_files);
-}
-
-#define __int_free(x)
-KLIST_INIT(32, int, __int_free)
-void test_klist(void)
-{
-    {
-        klist_t(32) *kl;
-        kliter_t(32) *p;
-        kl = kl_init(32);
-        *kl_pushp(32, kl) = 1;
-        *kl_pushp(32, kl) = 10;
-//	kl_shift(32, kl, 0);
-        for (p = kl_begin(kl); p != kl_end(kl); p = kl_next(p))
-            printd("%d\n", kl_val(p));
-        kl_destroy(32, kl);
-    }
-
-    klist_t(str) *dupes;
-    kliter_t(str) *p;
-    dupes = kl_init(str);
-    *kl_pushp(str, dupes) = strdup("asdf");
-    *kl_pushp(str, dupes) = strdup("qwertz");
-    for (p = kl_begin(dupes); p != kl_end(dupes); p = kl_next(p))
-        printd("%s\n", kl_val(p));
-    kl_destroy(str, dupes);
 }
 
 void dumpfiles(khash_t(str) *files)
@@ -721,7 +693,7 @@ int parseopts(int argc, char **argv)
             exit(0);
         case 'h':
             usage();
-            exit(1);
+            exit(0);
         case 'p': {
             int err;
             unescapestr(optarg, &seplen, &err);
@@ -765,9 +737,6 @@ int parseopts(int argc, char **argv)
 
 int main(int argc, char **argv)
 {
-//    test_klist();
-//    return 0;
-
     int firstarg = parseopts(argc, argv);
     printd("-- %s firstarg %d flags 0x%x\n", __func__, firstarg, flags);
 
@@ -791,9 +760,6 @@ int main(int argc, char **argv)
     if (!(flags & F_HIDEPROGRESS))
         fprintf(stderr, "\r%40s\r", " ");
 
-//    printd("-- before checkdupes\n");
-//    dumpfiles(files);
-
     khint_t k;
     khash_t(str) *checked_files = kh_init(str);
     for (k = kh_begin(files); k != kh_end(files); ++k)
@@ -801,16 +767,7 @@ int main(int argc, char **argv)
             checkdupes(k, files, checked_files);
         }
 
-//    printd("-- after checkdupes\n");
-//    dumpfiles(files);
-
-//    printd("-- checked_files\n");
-//    dumpfiles(checked_files);
-
     mergechecked(files, checked_files);
-
-//    printd("-- after mergechecked\n");
-//    dumpfiles(files);
 
     if (!(flags & F_CONSIDERHARDLINKS))
         for (k = kh_begin(files); k != kh_end(files); ++k)
