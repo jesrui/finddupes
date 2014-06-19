@@ -1,9 +1,10 @@
 language: c
 compiler:
-  - gcc
-  - clang
+    - gcc
+    - clang
 before_script:
     - sudo apt-get update
     - sudo apt-get install vim-common valgrind
-script: make
-after_script: ./check.sh
+script:
+    - make
+    - ./check.sh
