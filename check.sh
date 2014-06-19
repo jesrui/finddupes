@@ -19,8 +19,8 @@ D=testdir
 
 sortdupes()
 {
-    sep="${2-\n}"
-    setsep="${3-\n\n}"
+    sep="${1-\n}"
+    setsep="${2-\n\n}"
 
     gawk -v RS=$setsep -v FS=$sep '
         function join(array, start, end, sep,    result, i)
@@ -49,12 +49,7 @@ sortdupes()
         }'
 }
 
-oneTimeSetUp()
-{
-    ln $D/two $D/hardlink_two
-}
-
-oneTimeTearDown()
+tearDown()
 {
     test -a $D/hardlink_two && rm $D/hardlink_two
 }
@@ -97,6 +92,9 @@ END
 testdir/recursed_a/symlink_seven
 testdir/symlink_dir/symlink_seven
 
+testdir/recursed_a/two_plus_one
+testdir/symlink_dir/two_plus_one
+
 testdir/recursed_a/one
 testdir/symlink_dir/one
 
@@ -125,6 +123,8 @@ END
 
 test_hardlink_file()
 {
+    ln $D/two $D/hardlink_two
+
     res=$($FD $D/two $D/hardlink_two)
     assertEquals 0 $?
     exp=
@@ -179,7 +179,6 @@ END
     assertEquals 0 $?
     exp=
     assertEquals "$exp" "$res"
-
 }
 
 test_big_file()
@@ -213,7 +212,7 @@ test_recursive()
     assertEquals 0 $?
     exp=$(sortdupes<<'END'
 testdir/recursed_b/three
-testdir/recursed_b/two_plus_one
+testdir/recursed_a/two_plus_one
 
 testdir/zero_a
 testdir/zero_b
@@ -243,8 +242,9 @@ test_separator()
 {
     res=$($FD --separator='\t' --setseparator='\n' -r $D/ | sortdupes '\t' '\n')
     assertEquals 0 $?
+
     exp=$(sortdupes '\t' '\n' <<'END'
-testdir/recursed_b/three	testdir/recursed_b/two_plus_one
+testdir/recursed_b/three	testdir/recursed_a/two_plus_one
 testdir/zero_a	testdir/zero_b
 testdir/two	testdir/twice_one	testdir/recursed_a/two
 testdir/seven	testdir/recursed_b/seven
@@ -273,7 +273,7 @@ test_omitfirst()
     res=$($FD -f $D/recursed_a/ $D/recursed_b/ | sortdupes)
     assertEquals 0 $?
     exp=$(sortdupes<<'END'
-testdir/recursed_b/two_plus_one
+testdir/recursed_b/three
 
 testdir/recursed_b/one
 
