@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/jesrui/finddupes.svg?branch=master)](https://travis-ci.org/jesrui/finddupes)
+
 # findupes
 
 `findupes` is a UNIX command line utility to list duplicate files in a given
