@@ -4,6 +4,51 @@ FD=./finddupes
 FD="valgrind --quiet --leak-check=full --error-exitcode=1 ./finddupes"
 D=testdir
 
+# sort output from finddupes
+#
+# The entries of each set are sorted first, then the sets.
+#
+# This is required in order to compare expected results since the order in
+# which dupes are listed depends on the order of directory listings, and these
+# vary from one target system to another. Listing order depends on the string
+# hashing too, but I believe hashing is the same for all target systems.
+#
+# Note that a test must call sortdupes only if it passes some directory to
+# finddupes. File arguments are fine.
+#
+
+sortdupes()
+{
+    sep="${2-\n}"
+    setsep="${3-\n\n}"
+
+    gawk -v RS=$setsep -v FS=$sep '
+        function join(array, start, end, sep,    result, i)
+        {
+            if (sep == "")
+                sep = " "
+            else if (sep == SUBSEP) # magic value
+                sep = ""
+            result = array[start]
+            for (i = start + 1; i <= end; i++)
+                result = result sep array[i]
+            return result
+        }
+
+        {
+            split($0, a, FS)
+            n = asort(a)
+            b = join(a, 1, n, FS)
+            s[j++] = b
+        }
+
+        END {
+            n = asort(s)
+            b = join(s, 1, n, RS);
+            print b
+        }'
+}
+
 oneTimeSetUp()
 {
     ln $D/two $D/hardlink_two
@@ -28,6 +73,7 @@ test_symlink_file()
     exp=$(cat<<'END'
 testdir/two
 testdir/symlink_two
+
 END
 )
     assertEquals "$exp" "$res"
@@ -35,9 +81,9 @@ END
 
 test_symlink_dir()
 {
-    res=$($FD --symlinks $D/recursed_a $D/symlink_dir)
+    res=$($FD --symlinks $D/recursed_a $D/symlink_dir | sortdupes)
     assertEquals 0 $?
-    exp=$(cat<<'END'
+    exp=$(sortdupes<<'END'
 testdir/recursed_a/symlink_seven
 testdir/symlink_dir/symlink_seven
 
@@ -45,9 +91,9 @@ END
 )
     assertEquals "$exp" "$res"
 
-    res=$($FD --symlinks --hardlinks $D/recursed_a $D/symlink_dir)
+    res=$($FD --symlinks --hardlinks $D/recursed_a $D/symlink_dir | sortdupes)
     assertEquals 0 $?
-    exp=$(cat<<'END'
+    exp=$(sortdupes<<'END'
 testdir/recursed_a/symlink_seven
 testdir/symlink_dir/symlink_seven
 
@@ -138,11 +184,12 @@ END
 
 test_big_file()
 {
-    res=$($FD $D/big)
+    res=$($FD $D/big | sortdupes)
     assertEquals 0 $?
-    exp=$(cat<<'END'
+    exp=$(sortdupes<<'END'
 testdir/big/big2_copy
 testdir/big/big2
+
 END
 )
     assertEquals "$exp" "$res"
@@ -154,6 +201,7 @@ test_unique()
     assertEquals 0 $?
     exp=$(cat<<'END'
 testdir/big/big1
+
 END
 )
     assertEquals "$exp" "$res"
@@ -161,9 +209,9 @@ END
 
 test_recursive()
 {
-    res=$($FD --recursive $D/)
+    res=$($FD --recursive $D/ | sortdupes)
     assertEquals 0 $?
-    exp=$(cat<<'END'
+    exp=$(sortdupes<<'END'
 testdir/recursed_b/three
 testdir/recursed_b/two_plus_one
 
@@ -193,9 +241,9 @@ END
 
 test_separator()
 {
-    res=$($FD --separator='\t' --setseparator='\n' -r $D/)
+    res=$($FD --separator='\t' --setseparator='\n' -r $D/ | sortdupes '\t' '\n')
     assertEquals 0 $?
-    exp=$(cat<<'END'
+    exp=$(sortdupes '\t' '\n' <<'END'
 testdir/recursed_b/three	testdir/recursed_b/two_plus_one
 testdir/zero_a	testdir/zero_b
 testdir/two	testdir/twice_one	testdir/recursed_a/two
@@ -222,9 +270,9 @@ END
 
 test_omitfirst()
 {
-    res=$($FD -f $D/recursed_a/ $D/recursed_b/)
+    res=$($FD -f $D/recursed_a/ $D/recursed_b/ | sortdupes)
     assertEquals 0 $?
-    exp=$(cat<<'END'
+    exp=$(sortdupes<<'END'
 testdir/recursed_b/two_plus_one
 
 testdir/recursed_b/one
