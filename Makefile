@@ -18,4 +18,4 @@ clean:
 .PHONY: install
 install: finddupes
 	 install finddupes ${PREFIX}/bin/finddupes
-	 install finddupes.1 ${PREFIX}/man/man1/finddupes.1
+	 install -m 644 finddupes.1 ${PREFIX}/man/man1/finddupes.1
