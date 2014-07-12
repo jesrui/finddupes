@@ -1,6 +1,6 @@
 .TH FINDDUPES 1
 .SH NAME
-finddupes \- finds duplicate files in a given set of directories
+finddupes \- finds duplicate files in a given set of paths
 
 .SH SYNOPSIS
 .B finddupes
@@ -13,6 +13,8 @@ finddupes \- finds duplicate files in a given set of directories
 .SH "DESCRIPTION"
 Searches the given paths for duplicate files. Such files are found by
 comparing file sizes and MD5 signatures.
+.I PATH
+arguments can be filenames or directories.
 
 .SH OPTIONS
 .TP
@@ -39,18 +41,24 @@ list only files that don't have duplicates
 .B -q --quiet
 hide progress indicator
 .TP
-.B -p --separator=sep
-separate files with sep string instead of '\\n'
+.B -p --separator\fR=\fIsep\fR
+separate files with
+.I sep
+string instead of '\\n'
 .TP
-.B -P --setseparator=sep
-separate sets with sep string instead of '\\n\\n'
+.B -P --setseparator\fR=\fIsep\fR
+separate sets with
+.I sep
+string instead of '\\n\\n'
 .TP
 .B -v --version
 display finddupes version and exit
 .TP
 .B -h --help
 display this help and exit
-
+.P
+.I sep
+strings may contain any C string escape sequence.
 .SH NOTES
 Unless
 .B --separator
@@ -61,61 +69,68 @@ together in groups, each file displayed on a separate line. The
 groups are then separated from each other by blank lines.
 
 .SH EXAMPLES
-Remove all duplicate files in a directory tree, ask for individual
-confirmation on each file.
-
-NOTE that this works only if filenames do not contain '\\n', '\\x00' or '\\x01'.
-
+.de ES \" start example code
+.
+.IP "" 4
+.
+.nf
 .fam C
-finddupes -r --separator '\\x01' --setseparator '\\x00' someDir |
-    xargs -0 -n1 -I{} sh -c '
-        s=$(echo {} | tr "\\001" "\\n"); echo -e "$s"; \\
-        echo -n {} | tr "\\001" "\\000" | xargs -0pr -n1 rm'
-.fam T
+..
 
+.de EE \" end example code
+.
+.fam T
+.fi
+.
+.IP "" 0
+.
+..
+
+Remove all duplicate files in a directory tree, ask for individual
+confirmation on each file. Note that this works only if filenames do not
+contain '\\n', '\\x00' or '\\x01'.
+.ES
+finddupes \-r \-\-separator '\\x01' \-\-setseparator '\\x00' someDir |
+    xargs \-0 \-n1 \-I{} sh \-c '
+        s=$(echo {} | tr "\\001" "\\n"); echo; echo \-e "$s"; \\
+        echo \-n {} | tr "\\001" "\\000" | xargs \-0pr \-n1 rm'
+.EE
+.P
 Preserve files in a good tree, remove duplicates elsewhere.
-Say you want to look for dupes in two trees,
+Suppose that you want to look for dupes in two trees,
 .BR goodTree
 and
 .BR badTree ,
-and, in
-case of duplicates, you want to preserve a copy in
+and, in case of duplicates, you want to preserve a copy in
 .BR goodTree
 and remove any other dupes. Note that, in each set, files inside the first tree
 appear before files inside the second one. The order in which duplicate sets
 are printed is not determined though.
-
-NOTE that this removes files without confirmation.
-
-.fam C
-finddupes -r --omitfirst -p '\\x00' -P '\\x00' goodTree badTree |
-    xargs -0 rm
-.fam T
-
+.ES
+finddupes \-r \-\-omitfirst \-p '\\x00' \-P '\\x00' goodTree badTree |
+    xargs \-0r rm
+.EE
+.P
 Find out how much disk space is occupied by duplicate files:
-
-.fam C
-finddupes -rf -p '\\x01' -P '\\x00' someDir/ |
-    xargs -0 -n1 -I{} sh -c '
-        echo -n {} | tr "\\001" "\\000" | xargs -0r du -csh'
-.fam T
-
-Or, more compact, with a grand total but without detailing the usage of each
-set:
-
-.fam C
-finddupes -rf -p '\\x00' -P '\\x00' someDir/ | xargs -0 du -ch
-.fam T
-
+.ES
+finddupes \-rf \-p '\\x01' \-P '\\x00' someDir/ |
+    xargs \-0 \-n1 \-I{} sh \-c '
+        echo \-n {} | tr "\\001" "\\000" | xargs \-0r du \-csh'
+.EE
+.P
+Similar to the previous command but with a grand total instead of detailing
+disk usage of each set:
+.ES
+finddupes \-rf \-p '\\x00' \-P '\\x00' someDir/ | xargs \-r0 du \-ch
+.EE
+.P
 List files without duplicates whose contents are present in
 .BR treeA
 but not in
 .BR treeB :
-
-.fam C
-finddupes --recursive --unique treeA treeB | grep '^treeA/'
-.fam T
-
+.ES
+finddupes \-\-recursive \-\-unique treeA treeB | grep '^treeA/'
+.EE
 .SH BUGS
 If you find a bug, please report it via <http://github.com/jesrui/finddupes/issues>.
 
