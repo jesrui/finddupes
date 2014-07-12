@@ -7,6 +7,45 @@ set of directories. Such files are found by comparing file sizes and MD5
 signatures. `finddupes` draws heavily from
 [`fdupes`](https://github.com/adrianlopezroche/fdupes).
 
+## Command Line Options
+
+`-r --recursive`
+for every directory given follow subdirectories encountered within
+
+`-s --symlinks`
+follow symlinked directories and compare files pointed to by their
+links; normally symlinked directories and files are skipped
+
+`-H --hardlinks`
+normally, when two or more files point to the same disk area they are
+treated as non-duplicates; this option will change this behavior
+
+`-n --noempty`
+exclude zero-length files from consideration
+
+`-f --omitfirst`
+omit the first file in each set of matches
+
+`-u --unique`
+list only files that don’t have duplicates
+
+`-q --quiet`
+hide progress indicator
+
+`-p --separator=sep`
+separate files with *sep* string instead of `'\n'`
+
+`-P --setseparator=sep`
+separate sets with *sep* string instead of `'\n\n'`
+
+`-v --version`
+display finddupes version and exit
+
+`-h --help`
+display this help and exit
+
+*sep* strings may contain any C string escape sequence.
+
 ## Examples
 
 ### Compare two directory trees and list duplicate files
@@ -30,7 +69,7 @@ NOTE that this works only if filenames do not contain '\n', '\x00' or '\x01'.
 
     finddupes --recursive --separator '\x01' --setseparator '\x00' someDir |
         xargs -0 -n1 -I{} sh -c '
-            s=$(echo {} | tr "\001" "\n"); echo -e "$s"; \
+            s=$(echo {} | tr "\001" "\n"); echo; echo -e "$s"; \
             echo -n {} | tr "\001" "\000" | xargs -0pr -n1 rm'
 
 ### Preserve files in a good tree, removing duplicates elsewhere
@@ -47,11 +86,11 @@ sets are printed is not determined though.
 NOTE that this removes files without confirmation.
 
     finddupes --recursive --omitfirst --separator '\x00' --setseparator '\x00' \
-        goodTree badTree | xargs -0 rm
+        goodTree badTree | xargs -0r rm
 
 ### Find out how much disk space is occupied by duplicate files
 
-The same trick with the separator strings can be used to fetch some dupe
+The same trick with the separator strings can be used to produce some dupe
 statistics. For example, to find out how much disk space could be liberated by
 removing dupes:
 
@@ -59,11 +98,11 @@ removing dupes:
         xargs -0 -n1 -I{} sh -c '
             echo -n {} | tr "\001" "\000" | xargs -0r du -csh'
 
-Or, more compact, with a grand total but without detailing the usage of each
+Or, more compactly, with a grand total but without detailing disk usage of each
 set:
 
     finddupes --recursive --separator '\x00' --setseparator '\x00' --omitfirst someDir/ |
-        xargs -0 du -ch 
+        xargs -0r du -ch
 
 ### List files without duplicates whose contents are present in tree A but not in tree B
 
@@ -72,7 +111,14 @@ duplicates.
 
     finddupes --recursive --unique treeA treeB | grep '^treeA/'
 
+## Credits
+
+Much of `finddupes` ideas and use cases are taken from
+[`fdupes`](https://github.com/adrianlopezroche/fdupes).
+`finddupes` uses [klib](https://github.com/attractivechaos/klib) for its data
+structures.
+
 ## License
 
-finddupes is distributed under the
+`finddupes` is distributed under the
 [MIT license](http://opensource.org/licenses/MIT).
