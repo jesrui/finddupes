@@ -218,13 +218,10 @@ char *joinpath(const char *dir, const char *filename)
     return fpath;
 }
 
-char *getsignatureuntil(const char *filename, off_t max_read,
-                        const struct stat *info)
+char *getsignatureuntil(const char *filename, off_t max_read, off_t fsize)
 {
 //    printd("-- %s filename %s\n", __func__, filename);
 
-    int x;
-    off_t fsize;
     off_t toread;
     md5_state_t state;
     md5_byte_t digest[16];
@@ -234,9 +231,7 @@ char *getsignatureuntil(const char *filename, off_t max_read,
     md5_init(&state);
 
     // include file size in the signature
-    md5_append(&state, (md5_byte_t*)(&info->st_size), sizeof(info->st_size));
-
-    fsize = info->st_size;
+    md5_append(&state, (md5_byte_t*)&fsize, sizeof fsize);
 
     if (max_read != 0 && fsize > max_read)
         fsize = max_read;
@@ -258,12 +253,14 @@ char *getsignatureuntil(const char *filename, off_t max_read,
         fsize -= toread;
     }
 
+    fclose(file);
+
     md5_finish(&state, digest);
 
     char signature[16*2 + 1];
     char *sigp = signature;
     static const char hexdigits[] = "0123456789abcdef";
-    for (x = 0; x < 16; x++) {
+    for (int x = 0; x < 16; x++) {
         md5_byte_t digit0 = digest[x] % 16;
         md5_byte_t digit1 = (digest[x] - digit0) / 16;
         *sigp++ = hexdigits[digit1];
@@ -271,19 +268,17 @@ char *getsignatureuntil(const char *filename, off_t max_read,
     }
     *sigp = '\0';
 
-    fclose(file);
-
     return strdup(signature);
 }
 
-char *getfullsignature(const char *filename, const struct stat *info)
+char *getfullsignature(const char *filename, off_t fsize)
 {
-    return getsignatureuntil(filename, 0, info);
+    return getsignatureuntil(filename, 0, fsize);
 }
 
-char *getpartialsignature(const char *filename, const struct stat *info)
+char *getpartialsignature(const char *filename, off_t fsize)
 {
-    return getsignatureuntil(filename, PARTIAL_MD5_SIZE, info);
+    return getsignatureuntil(filename, PARTIAL_MD5_SIZE, fsize);
 }
 
 /**
@@ -318,7 +313,7 @@ void grokfile(const char *fpath, const struct stat *info, khash_t(str) *files)
         goto out2;
     }
 
-    const char *sig = getpartialsignature(fpath, info);
+    const char *sig = getpartialsignature(fpath, info->st_size);
     if (!sig) {
         goto out2;
     }
@@ -428,7 +423,7 @@ void checkdupes(khint_t k, khash_t(str) *files, khash_t(str) *checked_files)
             continue;
         }
 
-        const char *fullsig = getfullsignature(fpath, &info);
+        const char *fullsig = getfullsignature(fpath, info.st_size);
         if (!fullsig)
             continue;
 
