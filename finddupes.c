@@ -56,7 +56,11 @@ KLIST_INIT(str, const char *, __nop_free)
 KLIST_INIT(inodev, struct inodev, __nop_free)
 KHASH_MAP_INIT_STR(str, klist_t(str)*)
 
+#ifdef GIT_VERSION
+const char VERSION[] = GIT_VERSION;
+#else
 const char VERSION[] = "0.2";
+#endif
 int flags;
 char *sep = "\n";
 size_t seplen = 1;

@@ -2,6 +2,10 @@ CFLAGS = -Wall -std=c99 -D_BSD_SOURCE -D_FILE_OFFSET_BITS=64 -O2 -g -I.
 OBJS = finddupes.o md5/md5.o
 PREFIX = /usr/local
 
+# If the sources come from a git repo, look for program version in repo tag
+GIT_VERSION := $(shell git describe --tags | sed "s/-/./g")
+CFLAGS += -DGIT_VERSION='"$(GIT_VERSION)"'
+
 # Use malloc wrappers to abort on failure? This works with gcc and clang
 LDFLAGS += -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=realloc
 OBJS += wrapmalloc.o
