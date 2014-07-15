@@ -222,38 +222,41 @@ char *getsignatureuntil(const char *filename, off_t max_read, off_t fsize)
 {
 //    printd("-- %s filename %s\n", __func__, filename);
 
-    off_t toread;
     md5_state_t state;
     md5_byte_t digest[16];
-    static md5_byte_t chunk[CHUNK_SIZE];
-    FILE *file;
 
     md5_init(&state);
 
-    // include file size in the signature
+    // always include file size in the signature
     md5_append(&state, (md5_byte_t*)&fsize, sizeof fsize);
 
-    if (max_read != 0 && fsize > max_read)
-        fsize = max_read;
+    if (filename) { // include (partial) file contents only if asked to
+        off_t toread;
+        static md5_byte_t chunk[CHUNK_SIZE];
+        FILE *file;
 
-    file = fopen(filename, "rb");
-    if (file == NULL) {
-        errormsg("error opening file %s\n", filename);
-        return NULL;
-    }
+        if (max_read != 0 && fsize > max_read)
+            fsize = max_read;
 
-    while (fsize > 0) {
-        toread = (fsize % CHUNK_SIZE) ? (fsize % CHUNK_SIZE) : CHUNK_SIZE;
-        if (fread(chunk, toread, 1, file) != 1) {
-            errormsg("error reading from file %s\n", filename);
-            fclose(file);
+        file = fopen(filename, "rb");
+        if (file == NULL) {
+            errormsg("error opening file %s\n", filename);
             return NULL;
         }
-        md5_append(&state, chunk, toread);
-        fsize -= toread;
-    }
 
-    fclose(file);
+        while (fsize > 0) {
+            toread = (fsize % CHUNK_SIZE) ? (fsize % CHUNK_SIZE) : CHUNK_SIZE;
+            if (fread(chunk, toread, 1, file) != 1) {
+                errormsg("error reading from file %s\n", filename);
+                fclose(file);
+                return NULL;
+            }
+            md5_append(&state, chunk, toread);
+            fsize -= toread;
+        }
+
+        fclose(file);
+    }
 
     md5_finish(&state, digest);
 
@@ -279,6 +282,11 @@ char *getfullsignature(const char *filename, off_t fsize)
 char *getpartialsignature(const char *filename, off_t fsize)
 {
     return getsignatureuntil(filename, PARTIAL_MD5_SIZE, fsize);
+}
+
+char *getfilesizesignature(off_t fsize)
+{
+    return getsignatureuntil(NULL, 0, fsize);
 }
 
 /**
@@ -313,7 +321,7 @@ void grokfile(const char *fpath, const struct stat *info, khash_t(str) *files)
         goto out2;
     }
 
-    const char *sig = getpartialsignature(fpath, info->st_size);
+    const char *sig = getfilesizesignature(info->st_size);
     if (!sig) {
         goto out2;
     }
@@ -396,10 +404,11 @@ void grokdir(const char *dir, khash_t(str) *files)
 }
 
 /**
- * move files for which the full signature differs from the partial signature
- * from files to checked_files
+ * move files for which the signature given by signaturefunction
+ * differs from the current partial signature from files to checked_files
  */
-void checkdupes(khint_t k, khash_t(str) *files, khash_t(str) *checked_files)
+void checkdupes(khint_t k, khash_t(str) *files, khash_t(str) *checked_files,
+    char *(*signaturefunction)(const char *filename, off_t fsize))
 {
 //    printd("%s files[%s]\n", __func__, kh_key(files, k));
     klist_t(str) *dupes = kh_value(files, k);
@@ -411,7 +420,7 @@ void checkdupes(khint_t k, khash_t(str) *files, khash_t(str) *checked_files)
         return;
     }
 
-    const char *partsig = kh_key(files, k); // partial signature
+    const char *partsig = kh_key(files, k); // current partial signature
     klist_t(str) *filtered_dupes = kl_init(str);
     struct stat info;
 
@@ -423,33 +432,33 @@ void checkdupes(khint_t k, khash_t(str) *files, khash_t(str) *checked_files)
             continue;
         }
 
-        const char *fullsig = getfullsignature(fpath, info.st_size);
-        if (!fullsig)
+        const char *newsig = signaturefunction(fpath, info.st_size);
+        if (!newsig)
             continue;
 
-//        printd("-- %s %s fullsig %s\n", __func__, fpath, fullsig);
+//        printd("-- %s %s newsig %s\n", __func__, fpath, newsig);
 
-        if (strcmp(fullsig, partsig) == 0) {
-//            printd("-- %s fullsig == partsig, continuing\n", __func__);
-            free((char*)fullsig);
+        if (strcmp(newsig, partsig) == 0) {
+//            printd("-- %s newsig == partsig, continuing\n", __func__);
+            free((char*)newsig);
             *kl_pushp(str, filtered_dupes) = fpath;
             continue;
         }
 
         int ret;
-        khiter_t checked_k = kh_put(str, checked_files, fullsig, &ret);
-//        printd("-- %s kh_put fullsig %s ret %d\n", __func__, fullsig, ret);
+        khiter_t checked_k = kh_put(str, checked_files, newsig, &ret);
+//        printd("-- %s kh_put newsig %s ret %d\n", __func__, newsig, ret);
 
         klist_t(str) *checked_dupes;
 
         switch (ret) {
         case -1:
             errormsg("%s error in kh_put()\n", __func__);
-            free((char*)fullsig);
+            free((char*)newsig);
             continue;
         case 0:
 //            printd("-- %s key already present\n", __func__);
-            free((char*)fullsig);
+            free((char*)newsig);
             checked_dupes = kh_value(checked_files, checked_k);
             break;
         default:
@@ -737,9 +746,9 @@ int main(int argc, char **argv)
 
     khash_t(str) *files = kh_init(str);
 
-    int i;
     struct stat info;
-    for (i = firstarg; i < argc; ++i) {
+    // first pass: get file size signature
+    for (int i = firstarg; i < argc; ++i) {
         if (stat(argv[i], &info) == -1) {
             errormsg("stat failed: %s: %s\n", argv[i], strerror(errno));
             continue;
@@ -755,20 +764,33 @@ int main(int argc, char **argv)
     if (!(flags & F_HIDEPROGRESS))
         fprintf(stderr, "\r%40s\r", " ");
 
-    khint_t k;
-    khash_t(str) *checked_files = kh_init(str);
-    for (k = kh_begin(files); k != kh_end(files); ++k)
-        if (kh_exist(files, k)) {
-            checkdupes(k, files, checked_files);
-        }
+//    printd("-- after first pass: getfilesizesignature\n");
+//    dumpfiles(files);
 
+    khash_t(str) *checked_files = kh_init(str);
+
+    // second pass: get partial signature (check the first bytes of the file)
+    for (khint_t k = kh_begin(files); k != kh_end(files); ++k)
+        if (kh_exist(files, k))
+            checkdupes(k, files, checked_files, getpartialsignature);
     mergechecked(files, checked_files);
 
+//    printd("-- after second pass: getpartialsignature\n");
+//    dumpfiles(files);
+
+    // third pass: get full contents signature
+    for (khint_t k = kh_begin(files); k != kh_end(files); ++k)
+        if (kh_exist(files, k))
+            checkdupes(k, files, checked_files, getfullsignature);
+    mergechecked(files, checked_files);
+
+//    printd("-- after third pass: getfullsignature\n");
+//    dumpfiles(files);
+
     if (!(flags & F_CONSIDERHARDLINKS))
-        for (k = kh_begin(files); k != kh_end(files); ++k)
-            if (kh_exist(files, k)) {
+        for (khint_t k = kh_begin(files); k != kh_end(files); ++k)
+            if (kh_exist(files, k))
                 checkinodes(k, files);
-            }
 
 //    printd("-- after checkinodes\n");
 //    dumpfiles(files);
