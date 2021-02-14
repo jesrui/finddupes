@@ -258,11 +258,12 @@ END
 
 test_separator_null()
 {
-    res=$($FD --separator '\001' --setseparator '\x00' $D/two $D/twice_one | xxd)
+    res=$($FD --separator '\001' --setseparator '\x00' $D/two $D/twice_one | hexdump -C)
     assertEquals 0 $?
     exp=$(cat<<'END'
-0000000: 7465 7374 6469 722f 7477 6f01 7465 7374  testdir/two.test
-0000010: 6469 722f 7477 6963 655f 6f6e 6500       dir/twice_one.
+00000000  74 65 73 74 64 69 72 2f  74 77 6f 01 74 65 73 74  |testdir/two.test|
+00000010  64 69 72 2f 74 77 69 63  65 5f 6f 6e 65 00        |dir/twice_one.|
+0000001e
 END
 )
     assertEquals "$exp" "$res"
